@@ -92,12 +92,12 @@ function Index() {
         <div className="mx-auto max-w-[1500px] px-5 lg:px-10"><SectionLabel number="02" text="Training" />
           <div className="mt-10 grid gap-10 lg:grid-cols-[1.05fr_.95fr]">
             <div className="relative min-h-[430px] overflow-hidden"><motion.img whileInView={{ scale: reduceMotion ? 1 : [1.05, 1] }} transition={{ duration: reduceMotion ? 0 : 1.2 }} viewport={{ once: true }} src={equipmentDetail} loading="lazy" width={1200} height={912} alt="Illustrative premium strength equipment and free weights" className="absolute inset-0 size-full object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" /><p className="absolute bottom-5 left-5 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Illustrative campaign image</p></div>
-            <div className="divide-y divide-border border-y border-border">{[
+            <div className="min-w-0 divide-y divide-border border-y border-border">{[
               ["01","Advanced strength machines","Controlled movement. Serious resistance."],
               ["02","Free weights","Build strength with foundational lifts."],
               ["03","Cardio","Train endurance and conditioning."],
               ["04","Coaching","Get guidance for your training journey."],
-            ].map(([n,title,copy]) => <motion.article initial={reduceMotion ? false : { opacity: 0, x: 24 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: .4 }} key={n} className="grid grid-cols-[3rem_1fr] gap-3 py-7"><span className="font-display text-lg text-primary">{n}</span><div><h3 className="font-display text-3xl font-bold uppercase sm:text-4xl">{title}</h3><p className="mt-2 text-sm text-muted-foreground">{copy}</p></div></motion.article>)}</div>
+            ].map(([n,title,copy]) => <motion.article initial={reduceMotion ? false : { opacity: 0, x: 24 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: .4 }} key={n} className="grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] gap-3 py-7"><span className="font-display text-lg text-primary">{n}</span><div className="min-w-0"><h3 className="font-display text-3xl font-bold uppercase sm:text-4xl">{title}</h3><p className="mt-2 text-sm text-muted-foreground">{copy}</p></div></motion.article>)}</div>
           </div>
         </div>
       </section>
