@@ -88,7 +88,7 @@ function Index() {
         <div className="lg:col-span-7 lg:pt-14"><p className="max-w-2xl text-xl leading-relaxed text-muted-foreground sm:text-2xl">A modern unisex training floor in Patna City, built around focused sessions, powerful equipment and the work it takes to transform.</p><p className="mt-6 max-w-xl text-sm leading-7 text-muted-foreground">The imagery on this website is illustrative. Ask the gym team for current floor photos and equipment availability before joining.</p></div>
       </section>
 
-      <section id="training" className="bg-card py-20 lg:py-28">
+      <section id="training" className="overflow-hidden bg-card py-20 lg:py-28">
         <div className="mx-auto max-w-[1500px] px-5 lg:px-10"><SectionLabel number="02" text="Training" />
           <div className="mt-10 grid gap-10 lg:grid-cols-[1.05fr_.95fr]">
             <div className="relative min-h-[430px] overflow-hidden"><motion.img whileInView={{ scale: reduceMotion ? 1 : [1.05, 1] }} transition={{ duration: reduceMotion ? 0 : 1.2 }} viewport={{ once: true }} src={equipmentDetail} loading="lazy" width={1200} height={912} alt="Illustrative premium strength equipment and free weights" className="absolute inset-0 size-full object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" /><p className="absolute bottom-5 left-5 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Illustrative campaign image</p></div>
