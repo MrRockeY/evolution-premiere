@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowDownRight, ArrowRight, Dumbbell, MapPin, Menu, MessageCircle, Phone, X } from "lucide-react";
+import { ArrowDownRight, ArrowRight, MapPin, Menu, MessageCircle, Phone, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import equipmentDetail from "@/assets/equipment-detail.jpg";
