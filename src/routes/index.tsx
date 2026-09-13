@@ -5,6 +5,8 @@ import { useState, type FormEvent } from "react";
 
 import equipmentDetail from "@/assets/equipment-detail.jpg";
 import heroImage from "@/assets/evolution-hero.jpg";
+import evolutionLogo from "@/assets/evolution-logo.png";
+import mobileHeroImage from "@/assets/evolution-mobile-hero.jpg";
 import trainingVideo from "@/assets/evolution-training.mp4.asset.json";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +18,7 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Evolution Fitness Gym Patna City | Memberships" },
-      { name: "description", content: "Train at Evolution Fitness Gym Unisex Advance in Jauganj, Patna City. Strength machines, free weights, cardio and coaching. Memberships from ₹800." },
+      { name: "description", content: "Train at Evolution Fitness Gym Unisex Advance in Jauganj, Patna City. Strength machines, free weights, cardio and coaching. Memberships from ₹1,200." },
       { property: "og:title", content: "Evolution Fitness Gym — Evolve Your Limits" },
       { property: "og:description", content: "Serious training, powerful machines and personal transformation in Patna City." },
       { property: "og:type", content: "website" },
@@ -32,7 +34,7 @@ export const Route = createFileRoute("/")({
         name: "Evolution Fitness Gym Unisex Advance",
         telephone: "+91 85072 14841",
         address: { "@type": "PostalAddress", streetAddress: "Jauganj, Kanghan Ghat", addressLocality: "Patna City", addressRegion: "Bihar", addressCountry: "IN" },
-        priceRange: "₹800–₹7,500",
+        priceRange: "₹1,200–₹9,500",
         url: "/",
       }),
     }],
@@ -58,7 +60,7 @@ function Index() {
       <header className="fixed inset-x-0 top-0 z-50 border-b border-border/60 bg-background/75 backdrop-blur-xl">
         <div className="mx-auto flex h-18 max-w-[1500px] items-center justify-between px-5 lg:px-10">
           <a href="#top" className="flex items-center gap-3" aria-label="Evolution Fitness home">
-            <span className="flex size-9 items-center justify-center border border-primary text-primary"><Dumbbell className="size-5" /></span>
+            <img src={evolutionLogo} width={1024} height={1024} alt="" aria-hidden="true" className="size-11 object-contain" />
             <span className="font-display text-xl font-black uppercase leading-none">Evolution <span className="text-primary">Fitness</span></span>
           </a>
           <nav className="hidden items-center gap-8 text-[11px] font-bold uppercase tracking-[0.18em] lg:flex" aria-label="Main navigation">
@@ -71,7 +73,8 @@ function Index() {
       </header>
 
       <section id="top" className="relative flex min-h-[92svh] items-end overflow-hidden pt-18">
-        <video className="absolute inset-0 size-full object-cover" autoPlay muted loop playsInline poster={heroImage} aria-label="Illustrative cinematic strength training footage">
+        <img src={mobileHeroImage} width={960} height={1536} alt="Illustrative athlete strength training in a modern gym" className="absolute inset-0 size-full object-cover object-top sm:hidden" />
+        <video className="absolute inset-0 hidden size-full object-cover sm:block" autoPlay muted loop playsInline poster={heroImage} aria-label="Illustrative cinematic strength training footage">
           <source src={trainingVideo.url} type="video/mp4" />
         </video>
         <div className="absolute inset-0 bg-[linear-gradient(90deg,var(--background)_0%,color-mix(in_oklab,var(--background)_78%,transparent)_42%,color-mix(in_oklab,var(--background)_22%,transparent)_76%),linear-gradient(0deg,var(--background)_0%,transparent_48%)]" />
@@ -103,17 +106,16 @@ function Index() {
       </section>
 
       <section id="memberships" className="mx-auto max-w-[1500px] px-5 py-20 lg:px-10 lg:py-30"><SectionLabel number="03" text="Memberships" /><div className="mt-8 flex flex-col justify-between gap-4 md:flex-row md:items-end"><h2 className="font-display text-6xl font-black uppercase leading-[.85] sm:text-8xl">Choose your<br/><span className="text-primary">commitment.</span></h2><p className="max-w-sm text-sm leading-6 text-muted-foreground">Simple plans for consistent training. Contact the gym to confirm current terms and inclusions.</p></div>
-        <div className="mt-12 grid border border-border md:grid-cols-3">{[
-          ["1 Month","₹800","Start now"], ["3 Months","₹4,000*","Build momentum"], ["1 Year","₹7,500","Go all in"]
-        ].map(([term,price,line],i) => <article key={term} className={`group relative p-7 sm:p-9 ${i < 2 ? "border-b border-border md:border-b-0 md:border-r" : ""}`}><p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">{term}</p><p className="my-8 font-display text-6xl font-black sm:text-7xl">{price}</p><p className="text-sm text-muted-foreground">{line}</p><Button asChild variant={i === 2 ? "copper" : "copperOutline"} size="editorial" className="mt-10 w-full"><a href={whatsappUrl(`Hi Evolution Fitness, I'd like to join the ${term} membership.`)} target="_blank" rel="noreferrer">Join now <ArrowRight /></a></Button></article>)}</div>
-        <p className="mt-4 text-xs text-muted-foreground">*3-month price shown as supplied; confirm current offer and conditions directly with the gym.</p>
+        <div className="mt-12 grid border border-border sm:grid-cols-2 lg:grid-cols-4">{[
+          ["1 Month","₹1,200","Start now"], ["3 Months","₹3,000","Build momentum"], ["6 Months","₹5,500","Stay consistent"], ["1 Year","₹9,500","Go all in"]
+        ].map(([term,price,line],i) => <article key={term} className={`group relative p-7 sm:p-9 ${i < 3 ? "border-b border-border sm:[&:nth-child(2)]:border-r-0 lg:border-b-0 lg:border-r" : ""} ${i === 0 ? "sm:border-r" : ""}`}><p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">{term}</p><p className="my-8 font-display text-6xl font-black lg:text-5xl xl:text-6xl">{price}</p><p className="text-sm text-muted-foreground">{line}</p><Button asChild variant={i === 3 ? "copper" : "copperOutline"} size="editorial" className="mt-10 w-full"><a href={whatsappUrl(`Hi Evolution Fitness, I'd like to join the ${term} membership.`)} target="_blank" rel="noreferrer">Join now <ArrowRight /></a></Button></article>)}</div>
       </section>
 
       <section className="overflow-hidden bg-primary text-primary-foreground"><div className="mx-auto grid max-w-[1500px] lg:grid-cols-2"><div className="p-8 lg:p-16"><p className="text-xs font-bold uppercase tracking-[0.2em]">Ladies training</p><h2 className="mt-6 font-display text-6xl font-black uppercase leading-[.85] sm:text-8xl">Your time.<br/>Your space.</h2></div><div className="flex flex-col justify-center border-t border-primary-foreground/20 p-8 lg:border-l lg:border-t-0 lg:p-16"><p className="font-display text-6xl font-black sm:text-8xl">11 AM—2 PM</p><p className="mt-4 max-w-md text-sm leading-6 opacity-75">Dedicated ladies training timing, subject to confirmation with the gym before your visit.</p><Button asChild variant="copperOutline" size="editorial" className="mt-8 w-fit border-primary-foreground/50 text-primary-foreground hover:bg-primary-foreground/10"><a href={whatsappUrl("Hi Evolution Fitness, please confirm the current ladies training timing.")} target="_blank" rel="noreferrer">Confirm on WhatsApp</a></Button></div></div></section>
 
       <section className="mx-auto max-w-[1500px] px-5 py-20 lg:px-10 lg:py-28"><SectionLabel number="04" text="Testimonials" /><div className="mt-10 border-y border-border py-16 text-center"><p className="font-display text-4xl font-bold uppercase text-muted-foreground sm:text-6xl">Real member stories coming soon.</p><p className="mx-auto mt-5 max-w-lg text-sm leading-6 text-muted-foreground">Approved Google reviews will appear here once supplied by the owner. No placeholder reviews have been published.</p></div></section>
 
-      <section id="enquire" className="bg-card py-20 lg:py-28"><div className="mx-auto grid max-w-[1500px] gap-14 px-5 lg:grid-cols-2 lg:px-10"><div><SectionLabel number="05" text="Start now" /><h2 className="mt-8 font-display text-6xl font-black uppercase leading-[.85] sm:text-8xl">Book your<br/><span className="text-primary">free trial.</span></h2><p className="mt-6 max-w-md text-muted-foreground">Send your details directly to the Evolution Fitness team on WhatsApp.</p></div><form onSubmit={submitEnquiry} className="space-y-5 border-t border-primary/50 pt-8"><label className="block text-xs font-bold uppercase tracking-[.18em]">Your name<Input name="name" required placeholder="Enter your name" className="mt-3 h-13 rounded-none border-border bg-background px-4" /></label><label className="block text-xs font-bold uppercase tracking-[.18em]">Phone number<Input name="phone" type="tel" required placeholder="Your mobile number" className="mt-3 h-13 rounded-none border-border bg-background px-4" /></label><label className="block text-xs font-bold uppercase tracking-[.18em]">Membership<select name="plan" required defaultValue="Free trial" className="mt-3 h-13 w-full rounded-none border border-border bg-background px-4 text-sm"><option>Free trial</option><option>1 Month — ₹800</option><option>3 Months — ₹4,000*</option><option>1 Year — ₹7,500</option></select></label><Button type="submit" variant="copper" size="editorial" className="w-full">Continue on WhatsApp <MessageCircle /></Button></form></div></section>
+      <section id="enquire" className="bg-card py-20 lg:py-28"><div className="mx-auto grid max-w-[1500px] gap-14 px-5 lg:grid-cols-2 lg:px-10"><div><SectionLabel number="05" text="Start now" /><h2 className="mt-8 font-display text-6xl font-black uppercase leading-[.85] sm:text-8xl">Book your<br/><span className="text-primary">free trial.</span></h2><p className="mt-6 max-w-md text-muted-foreground">Send your details directly to the Evolution Fitness team on WhatsApp.</p></div><form onSubmit={submitEnquiry} className="space-y-5 border-t border-primary/50 pt-8"><label className="block text-xs font-bold uppercase tracking-[.18em]">Your name<Input name="name" required placeholder="Enter your name" className="mt-3 h-13 rounded-none border-border bg-background px-4" /></label><label className="block text-xs font-bold uppercase tracking-[.18em]">Phone number<Input name="phone" type="tel" required placeholder="Your mobile number" className="mt-3 h-13 rounded-none border-border bg-background px-4" /></label><label className="block text-xs font-bold uppercase tracking-[.18em]">Membership<select name="plan" required defaultValue="Free trial" className="mt-3 h-13 w-full rounded-none border border-border bg-background px-4 text-sm"><option>Free trial</option><option>1 Month — ₹1,200</option><option>3 Months — ₹3,000</option><option>6 Months — ₹5,500</option><option>1 Year — ₹9,500</option></select></label><Button type="submit" variant="copper" size="editorial" className="w-full">Continue on WhatsApp <MessageCircle /></Button></form></div></section>
 
       <section id="visit" className="grid lg:grid-cols-2"><div className="min-h-[420px]"><iframe title="Map to Evolution Fitness Gym in Jauganj, Patna City" src="https://www.google.com/maps?q=Jauganj%20Kanghan%20Ghat%20Patna%20City&output=embed" className="size-full min-h-[420px] border-0 grayscale-[.65] contrast-125" loading="lazy" referrerPolicy="no-referrer-when-downgrade" /></div><div className="flex flex-col justify-center bg-background p-8 lg:p-16"><SectionLabel number="06" text="Visit Evolution" /><h2 className="mt-8 font-display text-5xl font-black uppercase sm:text-7xl">Jauganj,<br/>Patna City.</h2><p className="mt-5 flex items-start gap-3 text-muted-foreground"><MapPin className="mt-1 size-4 shrink-0 text-primary" /> Jauganj, Patna City, Kanghan Ghat</p><p className="mt-3 flex items-center gap-3 text-muted-foreground"><Phone className="size-4 text-primary" /> <a href="tel:+918507214841" className="hover:text-primary">8507214841</a></p><div className="mt-8 flex flex-wrap gap-3"><Button asChild variant="copper" size="editorial"><a href={whatsappUrl("Hi Evolution Fitness, I'd like to plan a visit.")} target="_blank" rel="noreferrer"><MessageCircle /> WhatsApp</a></Button><Button asChild variant="copperOutline" size="editorial"><a href="https://www.google.com/maps/search/?api=1&query=Jauganj+Kanghan+Ghat+Patna+City" target="_blank" rel="noreferrer"><MapPin /> Directions</a></Button></div></div></section>
 
