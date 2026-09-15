@@ -16,6 +16,14 @@ dist-ssr
 .nitro
 *.local
 
+# Env (keep secrets local)
+.env
+.env.*
+!.env.example
+
+# Supabase CLI
+supabase/.temp/
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars

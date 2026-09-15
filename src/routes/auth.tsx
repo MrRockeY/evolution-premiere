@@ -8,7 +8,12 @@ import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/os/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { errMsg } from "@/lib/db";
-import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import {
+  checkDatabaseReady,
+  isSupabaseConfigured,
+  supabase,
+  supabaseSqlEditorUrl,
+} from "@/lib/supabase";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -36,6 +41,7 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [busy, setBusy] = useState(false);
+  const [dbMessage, setDbMessage] = useState<string | null>(null);
   const { user, loading } = useAuth();
   const navigate = useNavigate();
 
@@ -43,10 +49,26 @@ function AuthPage() {
     if (!loading && user) void navigate({ to: "/dashboard", replace: true });
   }, [loading, user, navigate]);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setDbMessage(
+        "Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to .env, then restart the dev server.",
+      );
+      return;
+    }
+    void checkDatabaseReady().then((r) => {
+      setDbMessage(r.ready ? null : (r.message ?? "Database is not ready."));
+    });
+  }, []);
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!isSupabaseConfigured) {
       toast.error("Add your database keys in the .env file to enable accounts.");
+      return;
+    }
+    if (dbMessage) {
+      toast.error(dbMessage);
       return;
     }
     const form = new FormData(event.currentTarget);
@@ -130,11 +152,20 @@ function AuthPage() {
             : "New members start here. Your trainer access is set by the gym owner."}
         </p>
 
-        {!isSupabaseConfigured && (
-          <p className="mt-6 border-l-2 border-primary bg-primary/5 p-4 text-xs leading-5 text-muted-foreground">
-            Accounts are inactive until the database keys are filled into the .env file and the
-            setup script in supabase/schema.sql has been run.
-          </p>
+        {dbMessage && (
+          <div className="mt-6 max-w-md border-l-2 border-primary bg-primary/5 p-4 text-xs leading-5 text-muted-foreground">
+            <p>{dbMessage}</p>
+            {isSupabaseConfigured && (
+              <a
+                href={supabaseSqlEditorUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-block font-bold uppercase tracking-[0.16em] text-primary hover:underline"
+              >
+                Open SQL Editor →
+              </a>
+            )}
+          </div>
         )}
 
         <form onSubmit={submit} className="mt-8 max-w-md space-y-4">
@@ -165,7 +196,7 @@ function AuthPage() {
               placeholder="At least 6 characters"
             />
           </label>
-          <Button type="submit" variant="copper" size="editorial" className="w-full" disabled={busy}>
+          <Button type="submit" variant="copper" size="editorial" className="w-full" disabled={busy || !!dbMessage}>
             {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
           </Button>
         </form>

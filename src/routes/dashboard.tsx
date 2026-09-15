@@ -1,13 +1,17 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { LogOut } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import evolutionLogo from "@/assets/evolution-logo.png";
 import CustomerDashboard from "@/components/os/customer-dashboard";
 import OwnerDashboard from "@/components/os/owner-dashboard";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import {
+  checkDatabaseReady,
+  isSupabaseConfigured,
+  supabaseSqlEditorUrl,
+} from "@/lib/supabase";
 
 export const Route = createFileRoute("/dashboard")({
   ssr: false,
@@ -32,27 +36,52 @@ export const Route = createFileRoute("/dashboard")({
 function DashboardPage() {
   const { loading, user, role, profile, signOut } = useAuth();
   const navigate = useNavigate();
+  const [dbReady, setDbReady] = useState<boolean | null>(null);
+  const [dbMessage, setDbMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) void navigate({ to: "/auth", replace: true });
   }, [loading, user, navigate]);
 
-  if (!isSupabaseConfigured) {
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setDbReady(false);
+      setDbMessage("Add your project URL and publishable key to .env, then restart the dev server.");
+      return;
+    }
+    void checkDatabaseReady().then((r) => {
+      setDbReady(r.ready);
+      setDbMessage(r.ready ? null : (r.message ?? null));
+    });
+  }, []);
+
+  if (!isSupabaseConfigured || dbReady === false) {
     return (
       <Centered>
-        <h1 className="font-display text-4xl font-black uppercase">Database not connected</h1>
+        <h1 className="font-display text-4xl font-black uppercase">
+          {!isSupabaseConfigured ? "Database not connected" : "Database setup needed"}
+        </h1>
         <p className="mt-4 max-w-md text-sm leading-6 text-muted-foreground">
-          Add your project URL and key to the .env file, then run the setup script in
-          supabase/schema.sql. The dashboard activates automatically after that.
+          {dbMessage ??
+            "Add your project URL and key to the .env file, then run supabase/schema.sql in the Supabase SQL Editor."}
         </p>
-        <Button asChild variant="copperOutline" size="editorial" className="mt-8">
-          <Link to="/">Back to website</Link>
-        </Button>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          {isSupabaseConfigured && (
+            <Button asChild variant="copper" size="editorial">
+              <a href={supabaseSqlEditorUrl} target="_blank" rel="noreferrer">
+                Open SQL Editor
+              </a>
+            </Button>
+          )}
+          <Button asChild variant="copperOutline" size="editorial">
+            <Link to="/">Back to website</Link>
+          </Button>
+        </div>
       </Centered>
     );
   }
 
-  if (loading) return <Centered>Loading your dashboard…</Centered>;
+  if (dbReady === null || loading) return <Centered>Loading your dashboard…</Centered>;
   if (!user) return <Centered>Redirecting to sign in…</Centered>;
 
   return (

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowDownRight, ArrowRight, MapPin, Menu, MessageCircle, Phone, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
@@ -10,6 +10,7 @@ import mobileHeroImage from "@/assets/evolution-mobile-hero.jpg";
 import trainingVideo from "@/assets/evolution-training.mp4.asset.json";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/hooks/useAuth";
 
 const PHONE = "918507214841";
 const whatsappUrl = (message: string) => `https://wa.me/${PHONE}?text=${encodeURIComponent(message)}`;
@@ -45,6 +46,9 @@ export const Route = createFileRoute("/")({
 function Index() {
   const [menuOpen, setMenuOpen] = useState(false);
   const reduceMotion = useReducedMotion();
+  const { user, loading: authLoading } = useAuth();
+  const memberHref = user ? "/dashboard" : "/auth";
+  const memberLabel = user ? "Member area" : "Member login";
 
   const submitEnquiry = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -66,10 +70,32 @@ function Index() {
           <nav className="hidden items-center gap-8 text-[11px] font-bold uppercase tracking-[0.18em] lg:flex" aria-label="Main navigation">
             {[["The Gym","gym"],["Training","training"],["Memberships","memberships"],["Visit","visit"]].map(([label,id]) => <a key={id} href={`#${id}`} className="transition-colors hover:text-primary">{label}</a>)}
           </nav>
-          <div className="hidden lg:block"><Button asChild variant="copper" size="editorial"><a href="#enquire">Book free trial <ArrowRight /></a></Button></div>
+          <div className="hidden items-center gap-3 lg:flex">
+            {!authLoading && (
+              <Button asChild variant="copperOutline" size="editorial">
+                <Link to={memberHref}>{memberLabel}</Link>
+              </Button>
+            )}
+            <Button asChild variant="copper" size="editorial"><a href="#enquire">Book free trial <ArrowRight /></a></Button>
+          </div>
           <Button variant="ghost" size="icon" className="lg:hidden" aria-label={menuOpen ? "Close menu" : "Open menu"} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</Button>
         </div>
-        {menuOpen && <nav className="border-t border-border bg-background px-5 py-6 lg:hidden" aria-label="Mobile navigation">{[["The Gym","gym"],["Training","training"],["Memberships","memberships"],["Visit","visit"]].map(([label,id]) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)} className="block border-b border-border py-4 font-display text-2xl font-bold uppercase">{label}</a>)}</nav>}
+        {menuOpen && (
+          <nav className="border-t border-border bg-background px-5 py-6 lg:hidden" aria-label="Mobile navigation">
+            {[["The Gym","gym"],["Training","training"],["Memberships","memberships"],["Visit","visit"]].map(([label,id]) => (
+              <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)} className="block border-b border-border py-4 font-display text-2xl font-bold uppercase">{label}</a>
+            ))}
+            {!authLoading && (
+              <Link
+                to={memberHref}
+                onClick={() => setMenuOpen(false)}
+                className="block border-b border-border py-4 font-display text-2xl font-bold uppercase text-primary"
+              >
+                {memberLabel}
+              </Link>
+            )}
+          </nav>
+        )}
       </header>
 
       <section id="top" className="relative flex min-h-[92svh] items-end overflow-hidden pt-18">

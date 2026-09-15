@@ -49,7 +49,7 @@ export type Expense = {
   note: string | null;
 };
 
-export type Attendance = { id: string; user_id: string; attended_on: string };
+export type Attendance = { id: string; user_id: string; attended_on: string; source?: string };
 
 export type Exercise = {
   id: string;
@@ -115,6 +115,41 @@ export type AdviceReply = {
   author_id: string;
   message: string;
   created_at: string;
+};
+
+export type MemberPlan = {
+  id: string;
+  user_id: string;
+  workout_template_id: string | null;
+  diet_template_id: string | null;
+  started_on: string;
+  active: boolean;
+};
+
+export type WorkoutLog = {
+  id: string;
+  user_id: string;
+  log_date: string;
+  day_number: number;
+  template_id: string | null;
+  notes: string | null;
+};
+
+export type WorkoutTemplateDay = {
+  id: string;
+  template_id: string;
+  day_number: number;
+  title: string;
+};
+
+export type WorkoutTemplateItem = {
+  id: string;
+  day_id: string;
+  exercise_id: string;
+  sets: number;
+  reps: string;
+  rest_seconds: number;
+  position: number;
 };
 
 export const GOALS = [
