@@ -29,6 +29,10 @@ const url = readEnv("VITE_SUPABASE_URL");
 const token = process.env.SUPABASE_ACCESS_TOKEN?.trim() || readEnv("SUPABASE_ACCESS_TOKEN");
 const ref = url.match(/^https:\/\/([a-z0-9-]+)\.supabase\.(co|in)$/i)?.[1];
 const site = process.env.SITE_URL?.trim() || "https://evolution-premiere.vercel.app";
+const extraSites = [
+  "https://evolution-premiere-two.vercel.app",
+  "https://evolution-premiere-two.vercel.app/**",
+];
 
 if (!ref) {
   console.error("Missing VITE_SUPABASE_URL");
@@ -42,6 +46,7 @@ if (!token) {
 const allowList = [
   site,
   `${site}/**`,
+  ...extraSites,
   "http://localhost:8080",
   "http://localhost:8080/**",
   "http://127.0.0.1:8080",

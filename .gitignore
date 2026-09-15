@@ -26,6 +26,7 @@ dist-ssr
 # Vercel / Supabase CLI local state
 .vercel
 supabase/.temp/
+.supabase-token
 
 # Wrangler / Cloudflare
 .wrangler/
