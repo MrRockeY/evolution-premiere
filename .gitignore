@@ -16,13 +16,15 @@ dist-ssr
 .nitro
 *.local
 
-# Env (keep secrets local)
+# Env (keep secrets local; production publishable keys are committed)
 .env
-.env.*
+.env.local
+.env.*.local
 !.env.example
 !.env.production
 
-# Supabase CLI
+# Vercel / Supabase CLI local state
+.vercel
 supabase/.temp/
 
 # Wrangler / Cloudflare

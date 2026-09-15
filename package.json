@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "db:schema": "node scripts/apply-schema.mjs"
+    "db:schema": "node scripts/apply-schema.mjs",
+    "db:auth-urls": "node scripts/configure-auth-urls.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
