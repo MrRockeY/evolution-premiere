@@ -7,7 +7,6 @@ import equipmentDetail from "@/assets/equipment-detail.jpg";
 import heroImage from "@/assets/evolution-hero.jpg";
 import evolutionLogo from "@/assets/evolution-logo.png";
 import mobileHeroImage from "@/assets/evolution-mobile-hero.jpg";
-import trainingVideo from "@/assets/evolution-training.mp4.asset.json";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
@@ -100,9 +99,7 @@ function Index() {
 
       <section id="top" className="relative flex min-h-[92svh] items-end overflow-hidden pt-18">
         <img src={mobileHeroImage} width={960} height={1536} alt="Illustrative athlete strength training in a modern gym" className="absolute inset-0 size-full object-cover object-top sm:hidden" />
-        <video className="absolute inset-0 hidden size-full object-cover sm:block" autoPlay muted loop playsInline poster={heroImage} aria-label="Illustrative cinematic strength training footage">
-          <source src={trainingVideo.url} type="video/mp4" />
-        </video>
+        <img src={heroImage} width={1920} height={1080} alt="Illustrative cinematic strength training in a modern gym" className="absolute inset-0 hidden size-full object-cover sm:block" />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,var(--background)_0%,color-mix(in_oklab,var(--background)_78%,transparent)_42%,color-mix(in_oklab,var(--background)_22%,transparent)_76%),linear-gradient(0deg,var(--background)_0%,transparent_48%)]" />
         <motion.div initial={reduceMotion ? false : { opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .8 }} className="relative z-10 mx-auto w-full max-w-[1500px] px-5 pb-12 lg:px-10 lg:pb-18">
           <p className="mb-5 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.24em] text-primary"><span className="h-px w-10 bg-primary" /> Patna City / Unisex Advance</p>

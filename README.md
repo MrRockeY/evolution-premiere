@@ -1,46 +1,47 @@
-# Evolution Premiere
+# Evolution Fitness — Patna City
 
-Create a premium cinematic website for Evolution Fitness Gym Unisex Advance, Patna City — a modern unisex gym built around serious training, powerful machines, and personal transformation.
+Premium website and member platform (Evolution OS) for Evolution Fitness Gym Unisex Advance, Jauganj, Patna City.
 
-Concept — EVOLVE YOUR LIMITS. Build a high-end fitness brand experience using the gym’s existing copper, bronze, and black visual identity. Bold condensed typography, oversized headlines, dramatic athlete photography, dark premium surfaces, metallic copper accents, and a confident editorial layout. The result must feel like a serious professional fitness brand, not a generic gym template.
+## Features
 
-Experience
+- Public marketing site with memberships, enquiry form (WhatsApp), and location
+- Member authentication (sign in / sign up)
+- Owner dashboard: revenue, members, plans, fees, expenses, attendance, templates, advice
+- Member dashboard: profile, membership, workouts, diet, exercises, check-in, progress, Ask Trainer
 
-Hero — EVOLVE YOUR LIMITS: Cinematic training footage, massive typography, “BOOK A FREE TRIAL” and “VIEW MEMBERSHIPS” CTAs.
+## Stack
 
-The Gym: Showcase real equipment, training atmosphere, unisex environment, and the brand story.
+- React 19 + TanStack Start / Router / Query
+- Tailwind CSS 4 + Vite 8
+- Supabase (Auth + Postgres)
 
-Training: Advanced strength machines, free weights, cardio, and coaching — use only owner-confirmed facilities.
+## Setup
 
-Memberships: Showcase verified offers: 1 Month ₹800, 3 Months ₹4,000*, 1 Year ₹7,500. Add JOIN NOW and WhatsApp enquiry.
-
-Ladies Training: Highlight the dedicated 11 AM–2 PM timing, subject to confirmation.
-
-Testimonials: Use real approved Google reviews only.
-
-Visit Evolution: Jauganj, Patna City, Kanghan Ghat. Mobile: 8507214841. Add Google Maps and WhatsApp.
-
-Craft details: React/Next.js, Framer Motion, smooth lightweight scroll reveals, cinematic video, subtle image parallax, magnetic CTA interactions, premium hover micro-interactions, and responsive mobile-first layouts. Use high-performance motion, not heavy animations. Add SEO, local gym schema, optimized images, accessible HTML, and a functional membership enquiry form.
-
-Use the uploaded gym poster as the visual reference for brand identity and verified offers. Do not invent reviews, facilities, timings, prices, or business claims. Use editable placeholders for anything not confirmed. Make the website feel powerful, cinematic, premium, and conversion-focused.
-
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/f26e2dac-9ca5-48ed-9fc5-070ccef1b05d).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+1. Copy `.env.example` to `.env` and add your Supabase project URL and publishable key.
+2. Run `supabase/schema.sql` once in the Supabase SQL Editor.
+3. Install and start:
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+npm install
 npm run dev
 ```
+
+Open [http://localhost:8080](http://localhost:8080).
+
+## Scripts
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Local development server |
+| `npm run build` | Production build |
+| `npm run preview` | Preview production build |
+| `npm run db:schema` | Apply schema via Supabase access token |
+| `npm run db:auth-urls` | Configure Auth redirect URLs for production |
+
+## Production
+
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in your host (or use `.env.production`). Configure Supabase Auth Site URL and redirect allow-list to your live domain.
+
+## Contact
+
+Evolution Fitness Gym Unisex Advance · Jauganj, Kanghan Ghat, Patna City · 8507214841
