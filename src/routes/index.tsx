@@ -142,7 +142,27 @@ function Index() {
 
       <section id="visit" className="grid lg:grid-cols-2"><div className="min-h-[420px]"><iframe title="Map to Evolution Fitness Gym in Jauganj, Patna City" src="https://www.google.com/maps?q=Jauganj%20Kanghan%20Ghat%20Patna%20City&output=embed" className="size-full min-h-[420px] border-0 grayscale-[.65] contrast-125" loading="lazy" referrerPolicy="no-referrer-when-downgrade" /></div><div className="flex flex-col justify-center bg-background p-8 lg:p-16"><SectionLabel number="06" text="Visit Evolution" /><h2 className="mt-8 font-display text-5xl font-black uppercase sm:text-7xl">Jauganj,<br/>Patna City.</h2><p className="mt-5 flex items-start gap-3 text-muted-foreground"><MapPin className="mt-1 size-4 shrink-0 text-primary" /> Jauganj, Patna City, Kanghan Ghat</p><p className="mt-3 flex items-center gap-3 text-muted-foreground"><Phone className="size-4 text-primary" /> <a href="tel:+918507214841" className="hover:text-primary">8507214841</a></p><div className="mt-8 flex flex-wrap gap-3"><Button asChild variant="copper" size="editorial"><a href={whatsappUrl("Hi Evolution Fitness, I'd like to plan a visit.")} target="_blank" rel="noreferrer"><MessageCircle /> WhatsApp</a></Button><Button asChild variant="copperOutline" size="editorial"><a href="https://www.google.com/maps/search/?api=1&query=Jauganj+Kanghan+Ghat+Patna+City" target="_blank" rel="noreferrer"><MapPin /> Directions</a></Button></div></div></section>
 
-      <footer className="border-t border-border px-5 py-10 lg:px-10"><div className="mx-auto flex max-w-[1500px] flex-col gap-6 sm:flex-row sm:items-end sm:justify-between"><div><p className="font-display text-3xl font-black uppercase">Evolution <span className="text-primary">Fitness</span></p><p className="mt-2 text-xs uppercase tracking-[.16em] text-muted-foreground">Gym Unisex Advance · Patna City</p></div><p className="text-xs text-muted-foreground">© 2026 Evolution Fitness. All rights reserved.</p></div></footer>
+      <footer className="border-t border-border px-5 py-10 lg:px-10">
+        <div className="mx-auto flex max-w-[1500px] flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="font-display text-3xl font-black uppercase">
+              Evolution <span className="text-primary">Fitness</span>
+            </p>
+            <p className="mt-2 text-xs uppercase tracking-[.16em] text-muted-foreground">
+              Gym Unisex Advance · Patna City
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:items-end">
+            <p className="text-xs text-muted-foreground">© 2026 Evolution Fitness. All rights reserved.</p>
+            <Link
+              to="/owner"
+              className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70 hover:text-primary"
+            >
+              Staff / owner desk
+            </Link>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }

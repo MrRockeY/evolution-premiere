@@ -67,7 +67,7 @@ export default function CustomerDashboard() {
   const [tab, setTab] = useState<TabId>("home");
   const uid = user!.id;
 
-  const { data, loading, reload } = useAsyncData<CustomerData>(async () => {
+  const { data, loading, error, reload } = useAsyncData<CustomerData>(async () => {
     const [
       memberships,
       plans,
@@ -141,10 +141,18 @@ export default function CustomerDashboard() {
     };
   }, [uid]);
 
-  if (loading || !data) return <Loading />;
+  if (loading || !data) {
+    return (
+      <div className="space-y-4">
+        <Loading />
+        {error && <p className="text-center text-sm text-destructive">{error}</p>}
+      </div>
+    );
+  }
 
   const activeMembership = data.memberships.find((m) => m.status === "active" && m.end_date >= today());
   const activePlan = data.memberPlans.find((p) => p.active);
+  const profileIncomplete = !profile?.goal || !profile?.experience_level || !profile?.diet_preference;
 
   return (
     <div className="space-y-8">
@@ -160,6 +168,7 @@ export default function CustomerDashboard() {
           d={data}
           activeMembership={activeMembership}
           activePlan={activePlan}
+          profileIncomplete={profileIncomplete}
           onGo={setTab}
         />
       )}
@@ -179,17 +188,26 @@ export default function CustomerDashboard() {
   );
 }
 
+function daysUntil(iso: string) {
+  const end = new Date(iso + "T00:00:00");
+  const start = new Date(today() + "T00:00:00");
+  return Math.ceil((end.getTime() - start.getTime()) / 86400000);
+}
+
 function Home({
   d,
   activeMembership,
   activePlan,
+  profileIncomplete,
   onGo,
 }: {
   d: CustomerData;
   activeMembership?: Membership | undefined;
   activePlan?: MemberPlan | undefined;
+  profileIncomplete: boolean;
   onGo: (id: TabId) => void;
 }) {
+  const { profile } = useAuth();
   const planName = activeMembership
     ? d.plans.find((p) => p.id === activeMembership.plan_id)?.name ?? "Membership"
     : null;
@@ -201,14 +219,52 @@ function Home({
     ? d.diets.find((x) => x.id === activePlan.diet_template_id)?.name
     : null;
   const latest = d.progress[0];
+  const daysLeft = activeMembership ? daysUntil(activeMembership.end_date) : null;
+  const monthVisits = d.attendance.filter((a) => a.attended_on.startsWith(today().slice(0, 7))).length;
+
+  const templateId = activePlan?.workout_template_id ?? null;
+  const days = d.workoutDays
+    .filter((day) => day.template_id === templateId)
+    .sort((a, b) => a.day_number - b.day_number);
+  const loggedDayNums = new Set(
+    d.logs
+      .filter((l) => l.template_id === templateId && l.log_date === today())
+      .map((l) => l.day_number),
+  );
+  const nextDay = days.find((day) => !loggedDayNums.has(day.day_number)) ?? days[0];
+  const openAdvice = d.requests.filter((r) => r.status === "open").length;
 
   return (
     <div className="space-y-6">
+      {profileIncomplete && (
+        <div className="flex flex-col gap-3 border border-primary/40 bg-primary/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Complete your profile</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add your goal, experience and diet preference so we can match the right plans.
+            </p>
+          </div>
+          <Button variant="copper" size="editorial" onClick={() => onGo("profile")}>
+            Update profile
+          </Button>
+        </div>
+      )}
+
+      {!activeMembership && (
+        <div className="border-l-2 border-primary bg-primary/5 p-4 text-sm text-muted-foreground">
+          No active membership yet. Visit the Evolution Fitness desk or WhatsApp the gym to get your plan activated.
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Membership"
-          value={activeMembership ? "Active" : "None"}
-          hint={activeMembership ? `Ends ${fmtDate(activeMembership.end_date)}` : "Ask the desk to assign a plan"}
+          value={activeMembership ? (daysLeft != null && daysLeft <= 7 ? `${daysLeft}d left` : "Active") : "None"}
+          hint={
+            activeMembership
+              ? `${planName ?? "Plan"} · ends ${fmtDate(activeMembership.end_date)}`
+              : "Ask the desk to assign a plan"
+          }
         />
         <Stat
           label="Today"
@@ -216,9 +272,9 @@ function Home({
           hint={checkedIn ? "You're on the floor" : "Check in when you arrive"}
         />
         <Stat
-          label="Workout plan"
-          value={workoutName ? "Assigned" : "Pick one"}
-          hint={workoutName ?? "Choose a template in Workout"}
+          label="This month"
+          value={String(monthVisits)}
+          hint={monthVisits === 1 ? "1 visit" : `${monthVisits} visits`}
         />
         <Stat
           label="Latest weight"
@@ -226,37 +282,73 @@ function Home({
           hint={latest ? fmtDate(latest.entry_date) : "Log progress anytime"}
         />
       </div>
-      <Panel title="Quick actions">
-        <div className="flex flex-wrap gap-3">
-          <Button variant="copper" size="editorial" onClick={() => onGo("checkin")}>
-            Check in
-          </Button>
-          <Button variant="copperOutline" size="editorial" onClick={() => onGo("workout")}>
-            Open workout
-          </Button>
-          <Button variant="copperOutline" size="editorial" onClick={() => onGo("diet")}>
-            Open diet
-          </Button>
-          <Button variant="copperOutline" size="editorial" onClick={() => onGo("trainer")}>
-            Ask trainer
-          </Button>
-        </div>
-        {(planName || dietName) && (
-          <p className="mt-5 text-sm text-muted-foreground">
-            {planName && (
-              <>
-                Plan: <span className="text-foreground">{planName}</span>
-              </>
-            )}
-            {planName && dietName && " · "}
-            {dietName && (
-              <>
-                Diet: <span className="text-foreground">{dietName}</span>
-              </>
-            )}
-          </p>
-        )}
-      </Panel>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Panel title="Today's focus">
+          {nextDay && workoutName ? (
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">{workoutName}</p>
+              <h4 className="font-display text-3xl font-bold uppercase">
+                Day {nextDay.day_number} — {nextDay.title}
+              </h4>
+              <p className="text-sm text-muted-foreground">
+                {(nextDay.workout_template_items ?? []).length} exercises ·{" "}
+                {loggedDayNums.has(nextDay.day_number) ? "Logged today" : "Ready to train"}
+              </p>
+              <Button variant="copper" size="editorial" onClick={() => onGo("workout")}>
+                Open workout
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <Empty text="No workout assigned yet. Pick a plan or ask the desk." />
+              <Button variant="copperOutline" size="editorial" onClick={() => onGo("workout")}>
+                Choose workout
+              </Button>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="Your setup">
+          <div className="space-y-3 text-sm">
+            <p>
+              <span className="text-muted-foreground">Goal: </span>
+              {labelOf(GOALS, profile?.goal)}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Level: </span>
+              {labelOf(LEVELS, profile?.experience_level)}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Workout: </span>
+              {workoutName ?? "Not assigned"}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Diet: </span>
+              {dietName ?? "Not assigned"}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Open trainer questions: </span>
+              {openAdvice}
+            </p>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button variant="copper" size="sm" onClick={() => onGo("checkin")} disabled={checkedIn}>
+              {checkedIn ? "Checked in" : "Check in"}
+            </Button>
+            <Button variant="copperOutline" size="sm" onClick={() => onGo("diet")}>
+              Diet
+            </Button>
+            <Button variant="copperOutline" size="sm" onClick={() => onGo("progress")}>
+              Progress
+            </Button>
+            <Button variant="copperOutline" size="sm" onClick={() => onGo("trainer")}>
+              Ask trainer
+            </Button>
+          </div>
+        </Panel>
+      </div>
+
       <Disclaimer>
         Workout and diet plans are general training guidance, not medical advice. Speak with a
         qualified professional before starting any new programme.
@@ -545,6 +637,7 @@ function WorkoutTab({
           title={template.name}
           action={
             <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+              {activePlan ? "Your plan · " : ""}
               {labelOf(GOALS, template.goal)} · {labelOf(LEVELS, template.experience_level)} ·{" "}
               {template.days_per_week} days
             </span>
@@ -610,7 +703,12 @@ function WorkoutTab({
         </Panel>
       )}
 
-      <Panel title={template ? "Switch plan" : "Available plans"}>
+      <Panel title={template ? "Change workout plan" : "Available plans"}>
+        <p className="mb-4 text-xs text-muted-foreground">
+          {suggested.length && suggested.length < d.workouts.length
+            ? "Showing plans matched to your profile goal and level."
+            : "Pick a starter plan. The gym desk can also assign one for you."}
+        </p>
         {list.length === 0 ? (
           <Empty text="No workout templates yet." />
         ) : (

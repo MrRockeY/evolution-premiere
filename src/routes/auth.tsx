@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -38,10 +38,14 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+type Mode = "signin" | "signup" | "reset";
+
 function AuthPage() {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<Mode>("signin");
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [dbMessage, setDbMessage] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<string | null>(null);
   const { user, loading } = useAuth();
   const navigate = useNavigate();
 
@@ -76,38 +80,83 @@ function AuthPage() {
     const password = String(form.get("password") ?? "");
     setBusy(true);
     try {
+      if (mode === "reset") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin + "/auth",
+        });
+        if (error) throw error;
+        toast.success("Password reset email sent. Check your inbox.");
+        setMode("signin");
+        return;
+      }
+
       if (mode === "signup") {
+        const confirm = String(form.get("confirm_password") ?? "");
+        if (password !== confirm) {
+          toast.error("Passwords do not match.");
+          return;
+        }
+        const phone = String(form.get("phone") ?? "").trim();
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: window.location.origin + "/dashboard",
             data: {
-              full_name: String(form.get("full_name") ?? ""),
-              phone: String(form.get("phone") ?? ""),
+              full_name: String(form.get("full_name") ?? "").trim(),
+              phone,
             },
           },
         });
         if (error) throw error;
         if (!data.session) {
-          toast.success("Account created. Check your email to confirm, then sign in.");
+          setPendingConfirm(email);
+          toast.success("Account created. Confirm your email, then sign in.");
           setMode("signin");
         } else {
           toast.success("Welcome to Evolution OS.");
           void navigate({ to: "/dashboard", replace: true });
         }
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        toast.success("Signed in.");
-        void navigate({ to: "/dashboard", replace: true });
+        return;
       }
+
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      toast.success("Signed in.");
+      void navigate({ to: "/dashboard", replace: true });
     } catch (e) {
       toast.error(errMsg(e));
     } finally {
       setBusy(false);
     }
   };
+
+  const resendConfirm = async () => {
+    if (!pendingConfirm) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: pendingConfirm,
+        options: { emailRedirectTo: window.location.origin + "/dashboard" },
+      });
+      if (error) throw error;
+      toast.success("Confirmation email resent.");
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const title =
+    mode === "signin" ? "Member sign in" : mode === "signup" ? "Create account" : "Reset password";
+  const subtitle =
+    mode === "signin"
+      ? "Members sign in here. Gym staff use the owner desk login."
+      : mode === "signup"
+        ? "Create your member account. The desk assigns your membership after signup."
+        : "Enter your email and we will send a reset link.";
 
   return (
     <main className="grid min-h-screen bg-background text-foreground lg:grid-cols-[1.05fr_.95fr]">
@@ -127,9 +176,14 @@ function AuthPage() {
             <span className="metallic-text">Evolve.</span>
           </h1>
           <p className="mt-6 max-w-sm text-sm leading-6 text-muted-foreground">
-            Your membership, workout plan, diet plan, attendance and progress — all in one private
+            Membership, workout plan, diet, attendance and progress — your private Evolution Fitness
             member area.
           </p>
+          <ul className="mt-8 space-y-2 text-sm text-muted-foreground">
+            <li>· Daily floor check-in</li>
+            <li>· Gym-assigned workout & diet</li>
+            <li>· Ask the trainer anytime</li>
+          </ul>
         </div>
         <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
           Jauganj · Kanghan Ghat · Patna City
@@ -143,14 +197,8 @@ function AuthPage() {
         >
           <ArrowLeft className="size-4" /> Back to website
         </Link>
-        <h2 className="font-display text-5xl font-black uppercase leading-none">
-          {mode === "signin" ? "Member sign in" : "Create account"}
-        </h2>
-        <p className="mt-3 text-sm text-muted-foreground">
-          {mode === "signin"
-            ? "Owners and members sign in with the same form."
-            : "New members start here. Your trainer access is set by the gym owner."}
-        </p>
+        <h2 className="font-display text-5xl font-black uppercase leading-none">{title}</h2>
+        <p className="mt-3 max-w-md text-sm text-muted-foreground">{subtitle}</p>
 
         {dbMessage && (
           <div className="mt-6 max-w-md border-l-2 border-primary bg-primary/5 p-4 text-xs leading-5 text-muted-foreground">
@@ -168,6 +216,22 @@ function AuthPage() {
           </div>
         )}
 
+        {pendingConfirm && mode === "signin" && (
+          <div className="mt-6 max-w-md border-l-2 border-primary bg-primary/5 p-4 text-xs leading-5 text-muted-foreground">
+            <p>
+              Waiting for email confirmation for <span className="text-foreground">{pendingConfirm}</span>.
+            </p>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void resendConfirm()}
+              className="mt-3 font-bold uppercase tracking-[0.16em] text-primary hover:underline"
+            >
+              Resend confirmation email
+            </button>
+          </div>
+        )}
+
         <form onSubmit={submit} className="mt-8 max-w-md space-y-4">
           {mode === "signup" && (
             <>
@@ -176,8 +240,14 @@ function AuthPage() {
                 <input name="full_name" required className={inputClass + " mt-2"} placeholder="Your name" />
               </label>
               <label className="block text-[10px] font-bold uppercase tracking-[0.18em]">
-                Phone
-                <input name="phone" type="tel" className={inputClass + " mt-2"} placeholder="Mobile number" />
+                Phone (for desk / WhatsApp)
+                <input
+                  name="phone"
+                  type="tel"
+                  required
+                  className={inputClass + " mt-2"}
+                  placeholder="10-digit mobile"
+                />
               </label>
             </>
           )}
@@ -185,28 +255,86 @@ function AuthPage() {
             Email
             <input name="email" type="email" required className={inputClass + " mt-2"} placeholder="you@email.com" />
           </label>
-          <label className="block text-[10px] font-bold uppercase tracking-[0.18em]">
-            Password
-            <input
-              name="password"
-              type="password"
-              required
-              minLength={6}
-              className={inputClass + " mt-2"}
-              placeholder="At least 6 characters"
-            />
-          </label>
+          {mode !== "reset" && (
+            <label className="block text-[10px] font-bold uppercase tracking-[0.18em]">
+              Password
+              <div className="relative mt-2">
+                <input
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  minLength={6}
+                  className={inputClass + " pr-12"}
+                  placeholder="At least 6 characters"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+            </label>
+          )}
+          {mode === "signup" && (
+            <label className="block text-[10px] font-bold uppercase tracking-[0.18em]">
+              Confirm password
+              <input
+                name="confirm_password"
+                type={showPassword ? "text" : "password"}
+                required
+                minLength={6}
+                className={inputClass + " mt-2"}
+                placeholder="Repeat password"
+              />
+            </label>
+          )}
           <Button type="submit" variant="copper" size="editorial" className="w-full" disabled={busy || !!dbMessage}>
-            {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
+            {busy
+              ? "Please wait…"
+              : mode === "signin"
+                ? "Sign in"
+                : mode === "signup"
+                  ? "Create account"
+                  : "Send reset link"}
           </Button>
         </form>
 
-        <button
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-          className="mt-6 w-fit text-xs font-bold uppercase tracking-[0.18em] text-primary hover:underline"
-        >
-          {mode === "signin" ? "New here? Create an account" : "Already a member? Sign in"}
-        </button>
+        <div className="mt-6 flex flex-col gap-3">
+          {mode === "signin" && (
+            <button
+              type="button"
+              onClick={() => setMode("reset")}
+              className="w-fit text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground hover:text-primary"
+            >
+              Forgot password?
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
+            className="w-fit text-xs font-bold uppercase tracking-[0.18em] text-primary hover:underline"
+          >
+            {mode === "signup" ? "Already a member? Sign in" : "New here? Create an account"}
+          </button>
+          {mode === "reset" && (
+            <button
+              type="button"
+              onClick={() => setMode("signin")}
+              className="w-fit text-xs font-bold uppercase tracking-[0.18em] text-primary hover:underline"
+            >
+              Back to sign in
+            </button>
+          )}
+          <Link
+            to="/owner"
+            className="w-fit text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground hover:text-primary"
+          >
+            Gym owner desk →
+          </Link>
+        </div>
       </section>
     </main>
   );

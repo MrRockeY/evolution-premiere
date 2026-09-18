@@ -3,7 +3,7 @@ import { LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import evolutionLogo from "@/assets/evolution-logo.png";
-import CustomerDashboard from "@/components/os/customer-dashboard";
+import OwnerDashboard from "@/components/os/owner-dashboard";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -12,27 +12,22 @@ import {
   supabaseSqlEditorUrl,
 } from "@/lib/supabase";
 
-export const Route = createFileRoute("/dashboard")({
+export const Route = createFileRoute("/owner/desk")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Evolution OS Dashboard | Evolution Fitness Patna" },
+      { title: "Owner Desk | Evolution Fitness Patna" },
       {
         name: "description",
-        content:
-          "Private Evolution OS dashboard for gym members and the owner: memberships, fees, workouts, diet plans, attendance and progress.",
+        content: "Gym owner desk — members, dues, fees, payment history, plans and attendance.",
       },
-      { property: "og:title", content: "Evolution OS Dashboard" },
-      { property: "og:description", content: "Private gym management and member area." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: DashboardPage,
+  component: OwnerDeskPage,
 });
 
-function DashboardPage() {
+function OwnerDeskPage() {
   const { loading, user, role, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const [dbReady, setDbReady] = useState<boolean | null>(null);
@@ -41,11 +36,11 @@ function DashboardPage() {
   useEffect(() => {
     if (loading) return;
     if (!user) {
-      void navigate({ to: "/auth", replace: true });
+      void navigate({ to: "/owner", replace: true });
       return;
     }
-    if (role === "owner") {
-      void navigate({ to: "/owner/desk", replace: true });
+    if (role && role !== "owner") {
+      void navigate({ to: "/dashboard", replace: true });
     }
   }, [loading, user, role, navigate]);
 
@@ -67,10 +62,7 @@ function DashboardPage() {
         <h1 className="font-display text-4xl font-black uppercase">
           {!isSupabaseConfigured ? "Database not connected" : "Database setup needed"}
         </h1>
-        <p className="mt-4 max-w-md text-sm leading-6 text-muted-foreground">
-          {dbMessage ??
-            "Add your project URL and key to the .env file, then run supabase/schema.sql in the Supabase SQL Editor."}
-        </p>
+        <p className="mt-4 max-w-md text-sm leading-6 text-muted-foreground">{dbMessage}</p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           {isSupabaseConfigured && (
             <Button asChild variant="copper" size="editorial">
@@ -87,9 +79,9 @@ function DashboardPage() {
     );
   }
 
-  if (dbReady === null || loading) return <Centered>Loading your dashboard…</Centered>;
-  if (!user) return <Centered>Redirecting to sign in…</Centered>;
-  if (role === "owner") return <Centered>Opening owner desk…</Centered>;
+  if (dbReady === null || loading) return <Centered>Loading owner desk…</Centered>;
+  if (!user) return <Centered>Redirecting to owner login…</Centered>;
+  if (role !== "owner") return <Centered>Owner access only…</Centered>;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -98,22 +90,20 @@ function DashboardPage() {
           <Link to="/" className="flex items-center gap-3">
             <img src={evolutionLogo} alt="" aria-hidden className="size-9 object-contain" />
             <span className="font-display text-lg font-black uppercase leading-none">
-              Evolution <span className="text-primary">OS</span>
+              Evolution <span className="text-primary">Desk</span>
             </span>
           </Link>
           <div className="flex items-center gap-4">
             <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold leading-tight">
-                {profile?.full_name || user.email}
-              </p>
-              <p className="text-[10px] uppercase tracking-[0.18em] text-primary">Member</p>
+              <p className="text-sm font-semibold leading-tight">{profile?.full_name || user.email}</p>
+              <p className="text-[10px] uppercase tracking-[0.18em] text-primary">Gym owner</p>
             </div>
             <Button
               variant="copperOutline"
               size="sm"
               onClick={async () => {
                 await signOut();
-                void navigate({ to: "/auth", replace: true });
+                void navigate({ to: "/owner", replace: true });
               }}
             >
               <LogOut className="size-4" /> Sign out
@@ -122,7 +112,7 @@ function DashboardPage() {
         </div>
       </header>
       <main className="mx-auto max-w-[1500px] px-5 py-8 lg:px-8 lg:py-10">
-        <CustomerDashboard />
+        <OwnerDashboard />
       </main>
     </div>
   );

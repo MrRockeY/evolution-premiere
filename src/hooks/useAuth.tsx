@@ -25,14 +25,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const user = session?.user ?? null;
 
-  const load = async (uid: string) => {
+  const load = async (uid: string, meta?: User["user_metadata"]) => {
     const [{ data: p }, { data: r }] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", uid).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", uid),
     ]);
-    setProfile((p as Profile) ?? null);
+
+    let nextProfile = (p as Profile) ?? null;
+    if (!nextProfile) {
+      const fullName = typeof meta?.["full_name"] === "string" ? meta["full_name"] : null;
+      const phone = typeof meta?.["phone"] === "string" ? meta["phone"] : null;
+      const { data: upserted } = await supabase
+        .from("profiles")
+        .upsert({ id: uid, full_name: fullName, phone })
+        .select("*")
+        .maybeSingle();
+      nextProfile = (upserted as Profile) ?? null;
+      await supabase.from("user_roles").upsert({ user_id: uid, role: "customer" }, { onConflict: "user_id,role" });
+    }
+
+    setProfile(nextProfile);
     const roles = ((r ?? []) as { role: Role }[]).map((x) => x.role);
-    setRole(roles.includes("owner") ? "owner" : roles.length ? "customer" : "customer");
+    setRole(roles.includes("owner") ? "owner" : "customer");
   };
 
   useEffect(() => {
@@ -46,7 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!active) return;
       setSession(data.session);
       if (data.session?.user) {
-        load(data.session.user.id).finally(() => active && setLoading(false));
+        load(data.session.user.id, data.session.user.user_metadata).finally(
+          () => active && setLoading(false),
+        );
       } else {
         setLoading(false);
       }
@@ -58,10 +74,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === "SIGNED_OUT" || !next?.user) {
         setProfile(null);
         setRole(null);
+        setLoading(false);
         return;
       }
-      if (event === "SIGNED_IN" || event === "USER_UPDATED") {
-        void load(next.user.id);
+      if (event === "SIGNED_IN" || event === "USER_UPDATED" || event === "TOKEN_REFRESHED") {
+        setLoading(true);
+        void load(next.user.id, next.user.user_metadata).finally(() => active && setLoading(false));
       }
     });
 
@@ -80,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role,
       configured: isSupabaseConfigured,
       refreshProfile: async () => {
-        if (user) await load(user.id);
+        if (user) await load(user.id, user.user_metadata);
       },
       signOut: async () => {
         await supabase.auth.signOut();

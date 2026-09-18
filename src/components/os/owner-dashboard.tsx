@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -16,6 +16,7 @@ import {
   type Attendance,
   type DietTemplate,
   type Expense,
+  type MemberPlan,
   type Membership,
   type MembershipPlan,
   type Payment,
@@ -26,10 +27,11 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 
 const TABS = [
-  { id: "overview", label: "Overview" },
+  { id: "desk", label: "Desk" },
   { id: "members", label: "Members" },
-  { id: "plans", label: "Plans" },
+  { id: "dues", label: "Dues" },
   { id: "fees", label: "Fees" },
+  { id: "plans", label: "Plans" },
   { id: "expenses", label: "Expenses" },
   { id: "attendance", label: "Attendance" },
   { id: "templates", label: "Templates" },
@@ -47,32 +49,56 @@ type OwnerData = {
   attendance: Attendance[];
   workouts: WorkoutTemplate[];
   diets: DietTemplate[];
+  memberPlans: MemberPlan[];
   requests: (AdviceRequest & { advice_replies: { id: string; message: string; created_at: string }[] })[];
   progress: ProgressEntry[];
 };
 
 export default function OwnerDashboard() {
-  const [tab, setTab] = useState<TabId>("overview");
-  const { data, loading, reload } = useAsyncData<OwnerData>(async () => {
-    const [profiles, plans, memberships, payments, expenses, attendance, workouts, diets, requests, progress] =
-      await Promise.all([
-        db.from("profiles").select("*").order("created_at", { ascending: false }),
-        db.from("membership_plans").select("*").order("months"),
-        db.from("memberships").select("*").order("end_date", { ascending: false }),
-        db.from("payments").select("*").order("paid_on", { ascending: false }),
-        db.from("expenses").select("*").order("spent_on", { ascending: false }),
-        db.from("attendance").select("*").order("attended_on", { ascending: false }).limit(300),
-        db.from("workout_templates").select("*").order("created_at"),
-        db.from("diet_templates").select("*").order("created_at"),
-        db
-          .from("advice_requests")
-          .select("*, advice_replies(id, message, created_at)")
-          .order("created_at", { ascending: false }),
-        db.from("progress_entries").select("*").order("entry_date", { ascending: false }).limit(300),
-      ]);
-    const firstError = [profiles, plans, memberships, payments, expenses, attendance, workouts, diets, requests, progress].find(
-      (r) => r.error,
-    );
+  const [tab, setTab] = useState<TabId>("desk");
+  const [focusMemberId, setFocusMemberId] = useState<string | null>(null);
+  const { data, loading, error, reload } = useAsyncData<OwnerData>(async () => {
+    const [
+      profiles,
+      plans,
+      memberships,
+      payments,
+      expenses,
+      attendance,
+      workouts,
+      diets,
+      memberPlans,
+      requests,
+      progress,
+    ] = await Promise.all([
+      db.from("profiles").select("*").order("created_at", { ascending: false }),
+      db.from("membership_plans").select("*").order("months"),
+      db.from("memberships").select("*").order("end_date", { ascending: false }),
+      db.from("payments").select("*").order("paid_on", { ascending: false }),
+      db.from("expenses").select("*").order("spent_on", { ascending: false }),
+      db.from("attendance").select("*").order("attended_on", { ascending: false }).limit(300),
+      db.from("workout_templates").select("*").order("created_at"),
+      db.from("diet_templates").select("*").order("created_at"),
+      db.from("member_plans").select("*").order("created_at", { ascending: false }),
+      db
+        .from("advice_requests")
+        .select("*, advice_replies(id, message, created_at)")
+        .order("created_at", { ascending: false }),
+      db.from("progress_entries").select("*").order("entry_date", { ascending: false }).limit(300),
+    ]);
+    const firstError = [
+      profiles,
+      plans,
+      memberships,
+      payments,
+      expenses,
+      attendance,
+      workouts,
+      diets,
+      memberPlans,
+      requests,
+      progress,
+    ].find((r) => r.error);
     return {
       data: {
         profiles: (profiles.data ?? []) as Profile[],
@@ -83,6 +109,7 @@ export default function OwnerDashboard() {
         attendance: (attendance.data ?? []) as Attendance[],
         workouts: (workouts.data ?? []) as WorkoutTemplate[],
         diets: (diets.data ?? []) as DietTemplate[],
+        memberPlans: (memberPlans.data ?? []) as MemberPlan[],
         requests: (requests.data ?? []) as OwnerData["requests"],
         progress: (progress.data ?? []) as ProgressEntry[],
       },
@@ -90,23 +117,43 @@ export default function OwnerDashboard() {
     };
   }, []);
 
-  if (loading || !data) return <Loading />;
+  if (loading || !data) {
+    return (
+      <div className="space-y-4">
+        <Loading />
+        {error && <p className="text-center text-sm text-destructive">{error}</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">Owner console</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">Owner desk</p>
         <h1 className="mt-2 font-display text-5xl font-black uppercase leading-none sm:text-6xl">
-          Run the floor.
+          Run the gym.
         </h1>
+        <p className="mt-3 max-w-xl text-sm text-muted-foreground">
+          Dues, fees, members and attendance — organised so desk work stays fast.
+        </p>
       </div>
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
-      {tab === "overview" && <Overview d={data} />}
-      {tab === "members" && <Members d={data} reload={reload} />}
+      {tab === "desk" && <DeskHub d={data} onGo={setTab} />}
+      {tab === "dues" && (
+        <DuesBoard
+          d={data}
+          reload={reload}
+          onManage={(id) => {
+            setFocusMemberId(id);
+            setTab("members");
+          }}
+        />
+      )}
+      {tab === "members" && <Members d={data} reload={reload} initialOpenId={focusMemberId} />}
       {tab === "plans" && <Plans d={data} reload={reload} />}
       {tab === "fees" && <Fees d={data} reload={reload} />}
       {tab === "expenses" && <Expenses d={data} reload={reload} />}
-      {tab === "attendance" && <AttendanceTab d={data} />}
+      {tab === "attendance" && <AttendanceTab d={data} reload={reload} />}
       {tab === "templates" && <Templates d={data} reload={reload} />}
       {tab === "advice" && <Advice d={data} reload={reload} />}
     </div>
@@ -116,74 +163,271 @@ export default function OwnerDashboard() {
 const name = (d: OwnerData, id: string) =>
   d.profiles.find((p) => p.id === id)?.full_name || "Member";
 
-function Overview({ d }: { d: OwnerData }) {
+const activeMembershipFor = (d: OwnerData, userId: string) =>
+  d.memberships.find((m) => m.user_id === userId && m.status === "active" && m.end_date >= today()) ??
+  d.memberships.find((m) => m.user_id === userId);
+
+const activeMemberPlanFor = (d: OwnerData, userId: string) =>
+  d.memberPlans.find((p) => p.user_id === userId && p.active);
+
+const daysUntil = (iso: string) => {
+  const end = new Date(iso + "T00:00:00");
+  const start = new Date(today() + "T00:00:00");
+  return Math.ceil((end.getTime() - start.getTime()) / 86400000);
+};
+
+type MemberCategory = "active" | "due_soon" | "overdue" | "paused" | "none";
+
+const categorizeMember = (d: OwnerData, userId: string): MemberCategory => {
+  const m = activeMembershipFor(d, userId);
+  if (!m) return "none";
+  if (m.status === "paused") return "paused";
+  if (m.status === "active" && m.end_date >= today()) {
+    const left = daysUntil(m.end_date);
+    return left <= 7 ? "due_soon" : "active";
+  }
+  return "overdue";
+};
+
+const CATEGORY_LABEL: Record<MemberCategory, string> = {
+  active: "Active",
+  due_soon: "Due in 7 days",
+  overdue: "Expired / overdue",
+  paused: "Paused",
+  none: "No membership",
+};
+
+function DeskHub({ d, onGo }: { d: OwnerData; onGo: (id: TabId) => void }) {
   const revenue = d.payments.reduce((s, p) => s + Number(p.amount), 0);
   const spend = d.expenses.reduce((s, e) => s + Number(e.amount), 0);
-  const active = d.memberships.filter((m) => m.status === "active" && m.end_date >= today()).length;
   const todayCount = d.attendance.filter((a) => a.attended_on === today()).length;
+  const openAdvice = d.requests.filter((r) => r.status === "open").length;
 
-  const chart = useMemo(() => {
-    const map = new Map<string, { month: string; revenue: number; expenses: number }>();
-    const key = (iso: string) => iso.slice(0, 7);
-    for (const p of d.payments) {
-      const k = key(p.paid_on);
-      const row = map.get(k) ?? { month: k, revenue: 0, expenses: 0 };
-      row.revenue += Number(p.amount);
-      map.set(k, row);
-    }
-    for (const e of d.expenses) {
-      const k = key(e.spent_on);
-      const row = map.get(k) ?? { month: k, revenue: 0, expenses: 0 };
-      row.expenses += Number(e.amount);
-      map.set(k, row);
-    }
-    return [...map.values()].sort((a, b) => a.month.localeCompare(b.month)).slice(-6);
+  const counts = useMemo(() => {
+    const c: Record<MemberCategory, number> = { active: 0, due_soon: 0, overdue: 0, paused: 0, none: 0 };
+    for (const p of d.profiles) c[categorizeMember(d, p.id)] += 1;
+    return c;
   }, [d]);
+
+  const dueSoon = d.profiles
+    .filter((p) => categorizeMember(d, p.id) === "due_soon")
+    .map((p) => ({ profile: p, m: activeMembershipFor(d, p.id)! }))
+    .sort((a, b) => a.m.end_date.localeCompare(b.m.end_date));
+
+  const overdue = d.profiles
+    .filter((p) => categorizeMember(d, p.id) === "overdue")
+    .map((p) => ({ profile: p, m: activeMembershipFor(d, p.id)! }))
+    .sort((a, b) => a.m.end_date.localeCompare(b.m.end_date));
+
+  const byMethod = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of d.payments) map.set(p.method, (map.get(p.method) ?? 0) + Number(p.amount));
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [d.payments]);
+
+  const thisMonthKey = today().slice(0, 7);
+  const monthCollected = d.payments
+    .filter((p) => p.paid_on.startsWith(thisMonthKey))
+    .reduce((s, p) => s + Number(p.amount), 0);
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Total collected" value={inr(revenue)} hint={`${d.payments.length} payments`} />
-        <Stat label="Total expenses" value={inr(spend)} hint={`${d.expenses.length} entries`} />
-        <Stat label="Net" value={inr(revenue - spend)} hint="Collected minus expenses" />
-        <Stat label="Active memberships" value={String(active)} hint={`${todayCount} checked in today`} />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Stat label="This month" value={inr(monthCollected)} hint="Fees collected" />
+        <Stat label="All-time net" value={inr(revenue - spend)} hint={`${inr(revenue)} in · ${inr(spend)} out`} />
+        <Stat label="Active" value={String(counts.active)} hint="Current members" />
+        <Stat label="Due soon" value={String(counts.due_soon)} hint="Renew within 7 days" />
+        <Stat label="Floor today" value={String(todayCount)} hint={`${openAdvice} open advice`} />
       </div>
-      <Panel title="Revenue vs expenses">
-        {chart.length === 0 ? (
-          <Empty text="No payments or expenses recorded yet." />
-        ) : (
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chart}>
-                <CartesianGrid stroke="var(--color-border)" vertical={false} />
-                <XAxis dataKey="month" stroke="var(--color-muted-foreground)" fontSize={11} />
-                <YAxis stroke="var(--color-muted-foreground)" fontSize={11} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    color: "var(--color-foreground)",
-                  }}
-                />
-                <Bar dataKey="revenue" fill="var(--color-primary)" />
-                <Bar dataKey="expenses" fill="var(--color-muted-foreground)" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+
+      <Panel title="Member categories">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {(Object.keys(CATEGORY_LABEL) as MemberCategory[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onGo(key === "due_soon" || key === "overdue" ? "dues" : "members")}
+              className="border border-border bg-background p-4 text-left transition-colors hover:border-primary"
+            >
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">{CATEGORY_LABEL[key]}</p>
+              <p className="mt-2 font-display text-3xl font-black">{counts[key]}</p>
+            </button>
+          ))}
+        </div>
       </Panel>
-      <Panel title="Latest member progress">
-        {d.progress.length === 0 ? (
-          <Empty text="Members have not logged progress yet." />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Panel
+          title="Renewals due soon"
+          action={
+            <Button variant="ghost" size="sm" onClick={() => onGo("dues")}>
+              Full dues board
+            </Button>
+          }
+        >
+          {dueSoon.length === 0 ? (
+            <Empty text="No renewals in the next 7 days." />
+          ) : (
+            <Table head={["Member", "Plan", "Ends", "Days"]}>
+              {dueSoon.slice(0, 8).map(({ profile, m }) => (
+                <tr key={profile.id} className="border-b border-border/60">
+                  <td className="py-3 pr-4 font-semibold">{profile.full_name || "—"}</td>
+                  <td className="py-3 pr-4">{d.plans.find((p) => p.id === m.plan_id)?.name ?? "—"}</td>
+                  <td className="py-3 pr-4">{fmtDate(m.end_date)}</td>
+                  <td className="py-3 pr-4 text-primary">{daysUntil(m.end_date)}d</td>
+                </tr>
+              ))}
+            </Table>
+          )}
+        </Panel>
+
+        <Panel title="Expired / overdue">
+          {overdue.length === 0 ? (
+            <Empty text="No overdue memberships." />
+          ) : (
+            <Table head={["Member", "Phone", "Ended", ""]}>
+              {overdue.slice(0, 8).map(({ profile, m }) => (
+                <tr key={profile.id} className="border-b border-border/60">
+                  <td className="py-3 pr-4 font-semibold">{profile.full_name || "—"}</td>
+                  <td className="py-3 pr-4">{profile.phone || "—"}</td>
+                  <td className="py-3 pr-4">{fmtDate(m.end_date)}</td>
+                  <td className="py-3 pr-4 text-muted-foreground">{m.status}</td>
+                </tr>
+              ))}
+            </Table>
+          )}
+        </Panel>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Panel title="Fees by payment method">
+          {byMethod.length === 0 ? (
+            <Empty text="No payments yet." />
+          ) : (
+            <Table head={["Method", "Total"]}>
+              {byMethod.map(([method, total]) => (
+                <tr key={method} className="border-b border-border/60">
+                  <td className="py-3 pr-4 uppercase font-semibold">{method}</td>
+                  <td className="py-3 pr-4">{inr(total)}</td>
+                </tr>
+              ))}
+            </Table>
+          )}
+        </Panel>
+        <Panel title="Quick actions">
+          <div className="flex flex-wrap gap-3">
+            <Button variant="copper" size="editorial" onClick={() => onGo("members")}>
+              Manage members
+            </Button>
+            <Button variant="copperOutline" size="editorial" onClick={() => onGo("fees")}>
+              Record fee
+            </Button>
+            <Button variant="copperOutline" size="editorial" onClick={() => onGo("attendance")}>
+              Desk check-in
+            </Button>
+            <Button variant="copperOutline" size="editorial" onClick={() => onGo("advice")}>
+              Advice ({openAdvice})
+            </Button>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function DuesBoard({
+  d,
+  reload,
+  onManage,
+}: {
+  d: OwnerData;
+  reload: () => void;
+  onManage: (userId: string) => void;
+}) {
+  const [filter, setFilter] = useState<"all" | "due_soon" | "overdue">("all");
+
+  const rows = d.profiles
+    .map((p) => {
+      const cat = categorizeMember(d, p.id);
+      const m = activeMembershipFor(d, p.id);
+      return { profile: p, cat, m };
+    })
+    .filter((r) => {
+      if (filter === "all") return r.cat === "due_soon" || r.cat === "overdue";
+      return r.cat === filter;
+    })
+    .sort((a, b) => (a.m?.end_date ?? "").localeCompare(b.m?.end_date ?? ""));
+
+  const extend = async (m: Membership, months: number) => {
+    const base = m.end_date >= today() ? m.end_date : today();
+    const { error } = await db
+      .from("memberships")
+      .update({ end_date: addMonths(base, months), status: "active" })
+      .eq("id", m.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success(`Extended by ${months} month${months > 1 ? "s" : ""}.`);
+      reload();
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Panel
+        title="Dues & renewals"
+        action={
+          <div className="flex gap-2">
+            {(
+              [
+                ["all", "All action"],
+                ["due_soon", "Due soon"],
+                ["overdue", "Overdue"],
+              ] as const
+            ).map(([id, label]) => (
+              <Button
+                key={id}
+                variant={filter === id ? "copper" : "copperOutline"}
+                size="sm"
+                onClick={() => setFilter(id)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        }
+      >
+        {rows.length === 0 ? (
+          <Empty text="Nothing needs attention in this filter." />
         ) : (
-          <Table head={["Member", "Date", "Weight", "Waist", "Note"]}>
-            {d.progress.slice(0, 8).map((p) => (
-              <tr key={p.id} className="border-b border-border/60">
-                <td className="py-3 pr-4">{name(d, p.user_id)}</td>
-                <td className="py-3 pr-4">{fmtDate(p.entry_date)}</td>
-                <td className="py-3 pr-4">{p.weight_kg ? `${p.weight_kg} kg` : "—"}</td>
-                <td className="py-3 pr-4">{p.waist_cm ? `${p.waist_cm} cm` : "—"}</td>
-                <td className="py-3 pr-4 text-muted-foreground">{p.note ?? "—"}</td>
+          <Table head={["Member", "Phone", "Plan", "Status", "Ends", ""]}>
+            {rows.map(({ profile, cat, m }) => (
+              <tr key={profile.id} className="border-b border-border/60 align-top">
+                <td className="py-3 pr-4 font-semibold">{profile.full_name || "—"}</td>
+                <td className="py-3 pr-4">{profile.phone || "—"}</td>
+                <td className="py-3 pr-4">{m ? d.plans.find((p) => p.id === m.plan_id)?.name ?? "—" : "—"}</td>
+                <td className="py-3 pr-4">
+                  <span className={cat === "overdue" ? "text-destructive" : "text-primary"}>
+                    {CATEGORY_LABEL[cat]}
+                  </span>
+                </td>
+                <td className="py-3 pr-4">{m ? fmtDate(m.end_date) : "—"}</td>
+                <td className="py-3">
+                  <div className="flex flex-wrap gap-2">
+                    {m && (
+                      <>
+                        <Button variant="ghost" size="sm" onClick={() => void extend(m, 1)}>
+                          +1 mo
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => void extend(m, 3)}>
+                          +3 mo
+                        </Button>
+                      </>
+                    )}
+                    <Button variant="copperOutline" size="sm" onClick={() => onManage(profile.id)}>
+                      Manage
+                    </Button>
+                  </div>
+                </td>
               </tr>
             ))}
           </Table>
@@ -193,13 +437,26 @@ function Overview({ d }: { d: OwnerData }) {
   );
 }
 
-function Members({ d, reload }: { d: OwnerData; reload: () => void }) {
-  const [openId, setOpenId] = useState<string | null>(null);
+function Members({
+  d,
+  reload,
+  initialOpenId,
+}: {
+  d: OwnerData;
+  reload: () => void;
+  initialOpenId?: string | null;
+}) {
+  const [openId, setOpenId] = useState<string | null>(initialOpenId ?? null);
   const [q, setQ] = useState("");
 
-  const rows = d.profiles.filter((p) =>
-    (p.full_name ?? "").toLowerCase().includes(q.toLowerCase()) ||
-    (p.phone ?? "").includes(q),
+  useEffect(() => {
+    if (initialOpenId) setOpenId(initialOpenId);
+  }, [initialOpenId]);
+
+  const rows = d.profiles.filter(
+    (p) =>
+      (p.full_name ?? "").toLowerCase().includes(q.toLowerCase()) ||
+      (p.phone ?? "").includes(q),
   );
 
   const assign = async (event: FormEvent<HTMLFormElement>, userId: string) => {
@@ -210,9 +467,21 @@ function Members({ d, reload }: { d: OwnerData; reload: () => void }) {
     if (!plan) return;
     const start = String(f.get("start_date") || today());
     try {
+      await db
+        .from("memberships")
+        .update({ status: "expired" })
+        .eq("user_id", userId)
+        .eq("status", "active");
+
       const { data: created, error } = await db
         .from("memberships")
-        .insert({ user_id: userId, plan_id: plan.id, start_date: start, end_date: addMonths(start, plan.months), status: "active" })
+        .insert({
+          user_id: userId,
+          plan_id: plan.id,
+          start_date: start,
+          end_date: addMonths(start, plan.months),
+          status: "active",
+        })
         .select()
         .single();
       if (error) throw error;
@@ -234,6 +503,50 @@ function Members({ d, reload }: { d: OwnerData; reload: () => void }) {
     }
   };
 
+  const assignTraining = async (event: FormEvent<HTMLFormElement>, userId: string) => {
+    event.preventDefault();
+    const f = new FormData(event.currentTarget);
+    const workoutId = String(f.get("workout_template_id") || "") || null;
+    const dietId = String(f.get("diet_template_id") || "") || null;
+    try {
+      await db.from("member_plans").update({ active: false }).eq("user_id", userId).eq("active", true);
+      const { error } = await db.from("member_plans").insert({
+        user_id: userId,
+        workout_template_id: workoutId,
+        diet_template_id: dietId,
+        started_on: today(),
+        active: true,
+      });
+      if (error) throw error;
+      toast.success("Workout and diet assigned.");
+      reload();
+    } catch (e) {
+      toast.error(errMsg(e));
+    }
+  };
+
+  const setMembershipStatus = async (membershipId: string, status: string) => {
+    const { error } = await db.from("memberships").update({ status }).eq("id", membershipId);
+    if (error) toast.error(error.message);
+    else {
+      toast.success(status === "paused" ? "Membership paused." : "Membership reactivated.");
+      reload();
+    }
+  };
+
+  const extendMembership = async (m: Membership, months: number) => {
+    const base = m.end_date >= today() ? m.end_date : today();
+    const { error } = await db
+      .from("memberships")
+      .update({ end_date: addMonths(base, months), status: "active" })
+      .eq("id", m.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success(`Extended by ${months} month${months > 1 ? "s" : ""}.`);
+      reload();
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Panel
@@ -250,20 +563,20 @@ function Members({ d, reload }: { d: OwnerData; reload: () => void }) {
         {rows.length === 0 ? (
           <Empty text="No members yet. Members appear here after they sign up." />
         ) : (
-          <Table head={["Name", "Phone", "Goal", "Level", "Membership ends", "Status", ""]}>
+          <Table head={["Name", "Phone", "Category", "Plan ends", "Status", ""]}>
             {rows.map((p) => {
-              const m = d.memberships.find((x) => x.user_id === p.id);
-              const activeM = m && m.end_date >= today() && m.status === "active";
+              const m = activeMembershipFor(d, p.id);
+              const cat = categorizeMember(d, p.id);
+              const live = cat === "active" || cat === "due_soon";
               return (
                 <tr key={p.id} className="border-b border-border/60 align-top">
                   <td className="py-3 pr-4 font-semibold">{p.full_name || "—"}</td>
                   <td className="py-3 pr-4">{p.phone || "—"}</td>
-                  <td className="py-3 pr-4">{labelOf(GOALS, p.goal)}</td>
-                  <td className="py-3 pr-4">{labelOf(LEVELS, p.experience_level)}</td>
+                  <td className="py-3 pr-4">{CATEGORY_LABEL[cat]}</td>
                   <td className="py-3 pr-4">{m ? fmtDate(m.end_date) : "—"}</td>
                   <td className="py-3 pr-4">
-                    <span className={activeM ? "text-primary" : "text-muted-foreground"}>
-                      {activeM ? "Active" : m ? "Expired" : "None"}
+                    <span className={live ? "text-primary" : "text-muted-foreground"}>
+                      {live ? (cat === "due_soon" ? `${daysUntil(m!.end_date)}d left` : "Active") : m ? m.status : "None"}
                     </span>
                   </td>
                   <td className="py-3">
@@ -279,59 +592,146 @@ function Members({ d, reload }: { d: OwnerData; reload: () => void }) {
       </Panel>
 
       {openId && (
-        <Panel title={`Assign membership — ${name(d, openId)}`}>
-          <form onSubmit={(e) => assign(e, openId)} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Plan">
-              <select name="plan_id" required className={inputClass}>
-                {d.plans.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} — {inr(p.price)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Start date">
-              <input type="date" name="start_date" defaultValue={today()} className={inputClass} />
-            </Field>
-            <Field label="Payment method">
-              <select name="method" className={inputClass}>
-                {["cash", "upi", "card", "bank"].map((m) => (
-                  <option key={m} value={m}>
-                    {m.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <div className="flex flex-col justify-end gap-3">
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input type="checkbox" name="record_payment" defaultChecked className="size-4 accent-[var(--color-primary)]" />
-                Record fee payment
-              </label>
-              <Button type="submit" variant="copper" size="editorial">
-                Save membership
-              </Button>
-            </div>
-          </form>
-          <div className="mt-6">
-            <h4 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Fee history</h4>
-            {d.payments.filter((p) => p.user_id === openId).length === 0 ? (
-              <Empty text="No payments recorded for this member." />
-            ) : (
-              <Table head={["Date", "Amount", "Method", "Note"]}>
-                {d.payments
-                  .filter((p) => p.user_id === openId)
-                  .map((p) => (
-                    <tr key={p.id} className="border-b border-border/60">
-                      <td className="py-3 pr-4">{fmtDate(p.paid_on)}</td>
-                      <td className="py-3 pr-4">{inr(p.amount)}</td>
-                      <td className="py-3 pr-4 uppercase">{p.method}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{p.note ?? "—"}</td>
-                    </tr>
+        <>
+          <Panel title={`Membership — ${name(d, openId)}`}>
+            {(() => {
+              const current = activeMembershipFor(d, openId);
+              return (
+                <div className="mb-6 flex flex-wrap items-center gap-3 text-sm">
+                  <span>
+                    Current:{" "}
+                    <strong>
+                      {current
+                        ? `${d.plans.find((p) => p.id === current.plan_id)?.name ?? "Plan"} · ${fmtDate(current.end_date)} · ${current.status}`
+                        : "None"}
+                    </strong>
+                  </span>
+                  {current && current.status === "active" && (
+                    <Button variant="copperOutline" size="sm" onClick={() => void setMembershipStatus(current.id, "paused")}>
+                      Pause
+                    </Button>
+                  )}
+                  {current && current.status === "paused" && (
+                    <Button variant="copperOutline" size="sm" onClick={() => void setMembershipStatus(current.id, "active")}>
+                      Resume
+                    </Button>
+                  )}
+                  {current && (
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => void extendMembership(current, 1)}>
+                        +1 month
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => void extendMembership(current, 3)}>
+                        +3 months
+                      </Button>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+            <form onSubmit={(e) => assign(e, openId)} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Plan">
+                <select name="plan_id" required className={inputClass}>
+                  {d.plans.filter((p) => p.active).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — {inr(p.price)}
+                    </option>
                   ))}
-              </Table>
-            )}
-          </div>
-        </Panel>
+                </select>
+              </Field>
+              <Field label="Start date">
+                <input type="date" name="start_date" defaultValue={today()} className={inputClass} />
+              </Field>
+              <Field label="Payment method">
+                <select name="method" className={inputClass}>
+                  {["cash", "upi", "card", "bank"].map((m) => (
+                    <option key={m} value={m}>
+                      {m.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <div className="flex flex-col justify-end gap-3">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" name="record_payment" defaultChecked className="size-4 accent-[var(--color-primary)]" />
+                  Record fee payment
+                </label>
+                <Button type="submit" variant="copper" size="editorial">
+                  Save membership
+                </Button>
+              </div>
+            </form>
+            <div className="mt-6">
+              <h4 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Fee history</h4>
+              {d.payments.filter((p) => p.user_id === openId).length === 0 ? (
+                <Empty text="No payments recorded for this member." />
+              ) : (
+                <Table head={["Date", "Amount", "Method", "Note"]}>
+                  {d.payments
+                    .filter((p) => p.user_id === openId)
+                    .map((p) => (
+                      <tr key={p.id} className="border-b border-border/60">
+                        <td className="py-3 pr-4">{fmtDate(p.paid_on)}</td>
+                        <td className="py-3 pr-4">{inr(p.amount)}</td>
+                        <td className="py-3 pr-4 uppercase">{p.method}</td>
+                        <td className="py-3 pr-4 text-muted-foreground">{p.note ?? "—"}</td>
+                      </tr>
+                    ))}
+                </Table>
+              )}
+            </div>
+          </Panel>
+
+          <Panel title={`Training assignment — ${name(d, openId)}`}>
+            {(() => {
+              const mp = activeMemberPlanFor(d, openId);
+              return (
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Current workout:{" "}
+                  <span className="text-foreground">
+                    {mp?.workout_template_id
+                      ? d.workouts.find((w) => w.id === mp.workout_template_id)?.name ?? "—"
+                      : "None"}
+                  </span>
+                  {" · "}
+                  Diet:{" "}
+                  <span className="text-foreground">
+                    {mp?.diet_template_id
+                      ? d.diets.find((x) => x.id === mp.diet_template_id)?.name ?? "—"
+                      : "None"}
+                  </span>
+                </p>
+              );
+            })()}
+            <form onSubmit={(e) => assignTraining(e, openId)} className="grid gap-4 sm:grid-cols-3">
+              <Field label="Workout template">
+                <select name="workout_template_id" className={inputClass} defaultValue={activeMemberPlanFor(d, openId)?.workout_template_id ?? ""}>
+                  <option value="">None</option>
+                  {d.workouts.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Diet template">
+                <select name="diet_template_id" className={inputClass} defaultValue={activeMemberPlanFor(d, openId)?.diet_template_id ?? ""}>
+                  <option value="">None</option>
+                  {d.diets.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <div className="flex items-end">
+                <Button type="submit" variant="copper" size="editorial" className="w-full">
+                  Assign training
+                </Button>
+              </div>
+            </form>
+          </Panel>
+        </>
       )}
     </div>
   );
@@ -409,13 +809,19 @@ function Plans({ d, reload }: { d: OwnerData; reload: () => void }) {
 }
 
 function Fees({ d, reload }: { d: OwnerData; reload: () => void }) {
+  const [groupBy, setGroupBy] = useState<"list" | "month" | "method" | "member">("list");
+  const [methodFilter, setMethodFilter] = useState("all");
+
   const add = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const f = new FormData(form);
     try {
+      const userId = String(f.get("user_id"));
+      const membership = activeMembershipFor(d, userId);
       const { error } = await db.from("payments").insert({
-        user_id: String(f.get("user_id")),
+        user_id: userId,
+        membership_id: membership?.id ?? null,
         amount: Number(f.get("amount")),
         paid_on: String(f.get("paid_on")),
         method: String(f.get("method")),
@@ -430,6 +836,28 @@ function Fees({ d, reload }: { d: OwnerData; reload: () => void }) {
     }
   };
 
+  const filtered = d.payments.filter((p) => methodFilter === "all" || p.method === methodFilter);
+  const total = filtered.reduce((s, p) => s + Number(p.amount), 0);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, { key: string; total: number; count: number }>();
+    for (const p of filtered) {
+      const key =
+        groupBy === "month"
+          ? p.paid_on.slice(0, 7)
+          : groupBy === "method"
+            ? p.method.toUpperCase()
+            : groupBy === "member"
+              ? name(d, p.user_id)
+              : p.id;
+      const row = map.get(key) ?? { key, total: 0, count: 0 };
+      row.total += Number(p.amount);
+      row.count += 1;
+      map.set(key, row);
+    }
+    return [...map.values()].sort((a, b) => b.total - a.total);
+  }, [filtered, groupBy, d]);
+
   return (
     <div className="space-y-6">
       <Panel title="Record a fee payment">
@@ -438,7 +866,7 @@ function Fees({ d, reload }: { d: OwnerData; reload: () => void }) {
             <select name="user_id" required className={inputClass}>
               {d.profiles.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.full_name || p.id.slice(0, 8)}
+                  {p.full_name || p.phone || p.id.slice(0, 8)}
                 </option>
               ))}
             </select>
@@ -468,18 +896,64 @@ function Fees({ d, reload }: { d: OwnerData; reload: () => void }) {
           </Field>
         </form>
       </Panel>
-      <Panel title={`Payment history — ${inr(d.payments.reduce((s, p) => s + Number(p.amount), 0))}`}>
-        {d.payments.length === 0 ? (
+
+      <Panel
+        title={`Payment history — ${inr(total)}`}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={methodFilter}
+              onChange={(e) => setMethodFilter(e.target.value)}
+              className={inputClass + " max-w-32"}
+            >
+              <option value="all">All methods</option>
+              {["cash", "upi", "card", "bank"].map((m) => (
+                <option key={m} value={m}>
+                  {m.toUpperCase()}
+                </option>
+              ))}
+            </select>
+            {(
+              [
+                ["list", "List"],
+                ["month", "By month"],
+                ["method", "By method"],
+                ["member", "By member"],
+              ] as const
+            ).map(([id, label]) => (
+              <Button
+                key={id}
+                variant={groupBy === id ? "copper" : "ghost"}
+                size="sm"
+                onClick={() => setGroupBy(id)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        }
+      >
+        {filtered.length === 0 ? (
           <Empty text="No payments recorded yet." />
-        ) : (
+        ) : groupBy === "list" ? (
           <Table head={["Date", "Member", "Amount", "Method", "Note"]}>
-            {d.payments.map((p) => (
+            {filtered.map((p) => (
               <tr key={p.id} className="border-b border-border/60">
                 <td className="py-3 pr-4">{fmtDate(p.paid_on)}</td>
                 <td className="py-3 pr-4">{name(d, p.user_id)}</td>
                 <td className="py-3 pr-4 font-semibold">{inr(p.amount)}</td>
                 <td className="py-3 pr-4 uppercase">{p.method}</td>
                 <td className="py-3 pr-4 text-muted-foreground">{p.note ?? "—"}</td>
+              </tr>
+            ))}
+          </Table>
+        ) : (
+          <Table head={[groupBy === "month" ? "Month" : groupBy === "method" ? "Method" : "Member", "Payments", "Total"]}>
+            {grouped.map((g) => (
+              <tr key={g.key} className="border-b border-border/60">
+                <td className="py-3 pr-4 font-semibold">{g.key}</td>
+                <td className="py-3 pr-4">{g.count}</td>
+                <td className="py-3 pr-4">{inr(g.total)}</td>
               </tr>
             ))}
           </Table>
@@ -557,18 +1031,59 @@ function Expenses({ d, reload }: { d: OwnerData; reload: () => void }) {
   );
 }
 
-function AttendanceTab({ d }: { d: OwnerData }) {
+function AttendanceTab({ d, reload }: { d: OwnerData; reload: () => void }) {
   const byDate = useMemo(() => {
     const map = new Map<string, number>();
     for (const a of d.attendance) map.set(a.attended_on, (map.get(a.attended_on) ?? 0) + 1);
     return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 14);
   }, [d]);
 
+  const deskCheckIn = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const f = new FormData(form);
+    const userId = String(f.get("user_id"));
+    const date = String(f.get("attended_on") || today());
+    try {
+      const { error } = await db.from("attendance").upsert(
+        { user_id: userId, attended_on: date, source: "desk" },
+        { onConflict: "user_id,attended_on" },
+      );
+      if (error) throw error;
+      toast.success(`Checked in ${name(d, userId)}.`);
+      form.reset();
+      reload();
+    } catch (e) {
+      toast.error(errMsg(e));
+    }
+  };
+
   return (
     <div className="space-y-6">
+      <Panel title="Desk check-in">
+        <form onSubmit={deskCheckIn} className="grid gap-4 sm:grid-cols-3">
+          <Field label="Member">
+            <select name="user_id" required className={inputClass}>
+              {d.profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name || p.phone || p.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Date">
+            <input type="date" name="attended_on" defaultValue={today()} className={inputClass} />
+          </Field>
+          <div className="flex items-end">
+            <Button type="submit" variant="copper" size="editorial" className="w-full">
+              Mark present
+            </Button>
+          </div>
+        </form>
+      </Panel>
       <Panel title="Check-ins by day">
         {byDate.length === 0 ? (
-          <Empty text="No attendance yet. Members check themselves in from their dashboard." />
+          <Empty text="No attendance yet. Members check in from their app, or use desk check-in above." />
         ) : (
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -593,11 +1108,12 @@ function AttendanceTab({ d }: { d: OwnerData }) {
         {d.attendance.length === 0 ? (
           <Empty text="No check-ins recorded." />
         ) : (
-          <Table head={["Date", "Member"]}>
+          <Table head={["Date", "Member", "Source"]}>
             {d.attendance.slice(0, 40).map((a) => (
               <tr key={a.id} className="border-b border-border/60">
                 <td className="py-3 pr-4">{fmtDate(a.attended_on)}</td>
                 <td className="py-3 pr-4">{name(d, a.user_id)}</td>
+                <td className="py-3 pr-4 capitalize text-muted-foreground">{a.source ?? "self"}</td>
               </tr>
             ))}
           </Table>
