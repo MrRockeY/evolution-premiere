@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { db, errMsg, today, useAsyncData } from "@/lib/db";
 import {
+  BILL_CATEGORIES,
+  BILL_STATUSES,
   DIETS,
   GOALS,
   LEVELS,
@@ -14,6 +16,7 @@ import {
   labelOf,
   type AdviceRequest,
   type Attendance,
+  type Bill,
   type DietMeal,
   type DietTemplate,
   type Exercise,
@@ -50,6 +53,7 @@ type CustomerData = {
   memberships: Membership[];
   plans: MembershipPlan[];
   payments: Payment[];
+  bills: Bill[];
   attendance: Attendance[];
   memberPlans: MemberPlan[];
   workouts: WorkoutTemplate[];
@@ -72,6 +76,7 @@ export default function CustomerDashboard() {
       memberships,
       plans,
       payments,
+      bills,
       attendance,
       memberPlans,
       workouts,
@@ -86,6 +91,12 @@ export default function CustomerDashboard() {
       db.from("memberships").select("*").eq("user_id", uid).order("end_date", { ascending: false }),
       db.from("membership_plans").select("*").order("months"),
       db.from("payments").select("*").eq("user_id", uid).order("paid_on", { ascending: false }),
+      db
+        .from("bills")
+        .select("*")
+        .eq("user_id", uid)
+        .in("status", ["sent", "paid"])
+        .order("billed_on", { ascending: false }),
       db.from("attendance").select("*").eq("user_id", uid).order("attended_on", { ascending: false }).limit(90),
       db.from("member_plans").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
       db.from("workout_templates").select("*").order("created_at"),
@@ -126,6 +137,7 @@ export default function CustomerDashboard() {
         memberships: (memberships.data ?? []) as Membership[],
         plans: (plans.data ?? []) as MembershipPlan[],
         payments: (payments.data ?? []) as Payment[],
+        bills: bills.error ? [] : ((bills.data ?? []) as Bill[]),
         attendance: (attendance.data ?? []) as Attendance[],
         memberPlans: (memberPlans.data ?? []) as MemberPlan[],
         workouts: (workouts.data ?? []) as WorkoutTemplate[],
@@ -233,6 +245,7 @@ function Home({
   );
   const nextDay = days.find((day) => !loggedDayNums.has(day.day_number)) ?? days[0];
   const openAdvice = d.requests.filter((r) => r.status === "open").length;
+  const unpaidBills = d.bills.filter((b) => b.status === "sent");
 
   return (
     <div className="space-y-6">
@@ -246,6 +259,21 @@ function Home({
           </div>
           <Button variant="copper" size="editorial" onClick={() => onGo("profile")}>
             Update profile
+          </Button>
+        </div>
+      )}
+
+      {unpaidBills.length > 0 && (
+        <div className="flex flex-col gap-3 border border-primary/40 bg-primary/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Bill from the gym</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              You have {unpaidBills.length} unpaid bill{unpaidBills.length > 1 ? "s" : ""} —{" "}
+              {inr(unpaidBills.reduce((s, b) => s + Number(b.amount), 0))} total. Pay at the desk.
+            </p>
+          </div>
+          <Button variant="copper" size="editorial" onClick={() => onGo("membership")}>
+            View bills
           </Button>
         </div>
       )}
@@ -519,6 +547,31 @@ function MembershipTab({
                 </tr>
               );
             })}
+          </Table>
+        )}
+      </Panel>
+      <Panel title="Your bills">
+        {d.bills.length === 0 ? (
+          <Empty text="No bills from the gym yet." />
+        ) : (
+          <Table head={["Bill", "For", "Amount", "Date", "Status"]}>
+            {d.bills.map((b) => (
+              <tr key={b.id} className="border-b border-border/60">
+                <td className="py-3 pr-4 font-semibold">{b.bill_number}</td>
+                <td className="py-3 pr-4">
+                  <p>{b.title}</p>
+                  <p className="text-xs text-muted-foreground">{labelOf(BILL_CATEGORIES, b.category)}</p>
+                </td>
+                <td className="py-3 pr-4 font-semibold">{inr(b.amount)}</td>
+                <td className="py-3 pr-4">{fmtDate(b.billed_on)}</td>
+                <td className={`py-3 pr-4 ${b.status === "paid" ? "text-primary" : ""}`}>
+                  {labelOf(BILL_STATUSES, b.status)}
+                  {b.due_on && b.status === "sent" ? (
+                    <p className="text-xs text-muted-foreground">Due {fmtDate(b.due_on)}</p>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
           </Table>
         )}
       </Panel>

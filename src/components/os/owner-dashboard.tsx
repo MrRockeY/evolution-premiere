@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -6,6 +6,8 @@ import { Disclaimer, Empty, Field, Loading, Panel, Stat, TabBar, Table, inputCla
 import { Button } from "@/components/ui/button";
 import { addMonths, db, errMsg, today, useAsyncData } from "@/lib/db";
 import {
+  BILL_CATEGORIES,
+  BILL_STATUSES,
   fmtDate,
   inr,
   labelOf,
@@ -14,6 +16,7 @@ import {
   LEVELS,
   type AdviceRequest,
   type Attendance,
+  type Bill,
   type DietTemplate,
   type Expense,
   type MemberPlan,
@@ -30,6 +33,7 @@ const TABS = [
   { id: "desk", label: "Desk" },
   { id: "members", label: "Members" },
   { id: "dues", label: "Dues" },
+  { id: "billing", label: "Billing" },
   { id: "fees", label: "Fees" },
   { id: "plans", label: "Plans" },
   { id: "expenses", label: "Expenses" },
@@ -45,6 +49,7 @@ type OwnerData = {
   plans: MembershipPlan[];
   memberships: Membership[];
   payments: Payment[];
+  bills: Bill[];
   expenses: Expense[];
   attendance: Attendance[];
   workouts: WorkoutTemplate[];
@@ -63,6 +68,7 @@ export default function OwnerDashboard() {
       plans,
       memberships,
       payments,
+      bills,
       expenses,
       attendance,
       workouts,
@@ -75,6 +81,7 @@ export default function OwnerDashboard() {
       db.from("membership_plans").select("*").order("months"),
       db.from("memberships").select("*").order("end_date", { ascending: false }),
       db.from("payments").select("*").order("paid_on", { ascending: false }),
+      db.from("bills").select("*").order("created_at", { ascending: false }).limit(400),
       db.from("expenses").select("*").order("spent_on", { ascending: false }),
       db.from("attendance").select("*").order("attended_on", { ascending: false }).limit(300),
       db.from("workout_templates").select("*").order("created_at"),
@@ -99,12 +106,14 @@ export default function OwnerDashboard() {
       requests,
       progress,
     ].find((r) => r.error);
+    // bills table may not exist until supabase/bills.sql is run
     return {
       data: {
         profiles: (profiles.data ?? []) as Profile[],
         plans: (plans.data ?? []) as MembershipPlan[],
         memberships: (memberships.data ?? []) as Membership[],
         payments: (payments.data ?? []) as Payment[],
+        bills: bills.error ? [] : ((bills.data ?? []) as Bill[]),
         expenses: (expenses.data ?? []) as Expense[],
         attendance: (attendance.data ?? []) as Attendance[],
         workouts: (workouts.data ?? []) as WorkoutTemplate[],
@@ -150,6 +159,7 @@ export default function OwnerDashboard() {
         />
       )}
       {tab === "members" && <Members d={data} reload={reload} initialOpenId={focusMemberId} />}
+      {tab === "billing" && <Billing d={data} reload={reload} />}
       {tab === "plans" && <Plans d={data} reload={reload} />}
       {tab === "fees" && <Fees d={data} reload={reload} />}
       {tab === "expenses" && <Expenses d={data} reload={reload} />}
@@ -318,6 +328,9 @@ function DeskHub({ d, onGo }: { d: OwnerData; onGo: (id: TabId) => void }) {
           <div className="flex flex-wrap gap-3">
             <Button variant="copper" size="editorial" onClick={() => onGo("members")}>
               Manage members
+            </Button>
+            <Button variant="copperOutline" size="editorial" onClick={() => onGo("billing")}>
+              Create bill
             </Button>
             <Button variant="copperOutline" size="editorial" onClick={() => onGo("fees")}>
               Record fee
@@ -801,6 +814,593 @@ function Plans({ d, reload }: { d: OwnerData; reload: () => void }) {
                 </td>
               </tr>
             ))}
+          </Table>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function nextBillNumber() {
+  const d = new Date();
+  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `EF-${stamp}-${rand}`;
+}
+
+function toWhatsAppDigits(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  if (digits.length === 11 && digits.startsWith("0")) return `91${digits.slice(1)}`;
+  return digits;
+}
+
+function billRecipientName(d: OwnerData, bill: Bill) {
+  if (bill.user_id) return name(d, bill.user_id);
+  return bill.guest_name || "Guest";
+}
+
+function billPhone(d: OwnerData, bill: Bill) {
+  if (bill.guest_phone) return bill.guest_phone;
+  if (bill.user_id) return d.profiles.find((p) => p.id === bill.user_id)?.phone ?? null;
+  return null;
+}
+
+function buildBillWhatsAppMessage(d: OwnerData, bill: Bill) {
+  const who = billRecipientName(d, bill);
+  const lines = [
+    `*Evolution Fitness — Bill*`,
+    `Bill No: ${bill.bill_number}`,
+    `Name: ${who}`,
+    `For: ${bill.title}`,
+    `Category: ${labelOf(BILL_CATEGORIES, bill.category)}`,
+    `Amount: ${inr(bill.amount)}`,
+    `Billed: ${fmtDate(bill.billed_on)}`,
+  ];
+  if (bill.due_on) lines.push(`Due: ${fmtDate(bill.due_on)}`);
+  if (bill.description) lines.push(`Details: ${bill.description}`);
+  lines.push("", "Please pay at the Evolution Fitness desk or via UPI. Thank you!");
+  return lines.join("\n");
+}
+
+function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
+  const { user } = useAuth();
+  const [recipient, setRecipient] = useState<"member" | "guest">("member");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedMemberId, setSelectedMemberId] = useState(d.profiles[0]?.id ?? "");
+  const [title, setTitle] = useState("");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [phoneEditId, setPhoneEditId] = useState<string | null>(null);
+  const [phoneDraft, setPhoneDraft] = useState("");
+  const [payBillId, setPayBillId] = useState<string | null>(null);
+  const [payMethod, setPayMethod] = useState("cash");
+  const createIntent = useRef<"draft" | "site" | "whatsapp">("draft");
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const selectedMember = d.profiles.find((p) => p.id === selectedMemberId);
+  const memberMembership = selectedMemberId ? activeMembershipFor(d, selectedMemberId) : undefined;
+  const memberPlan = memberMembership
+    ? d.plans.find((p) => p.id === memberMembership.plan_id)
+    : undefined;
+
+  const openBills = d.bills.filter((b) => b.status === "draft" || b.status === "sent");
+  const openTotal = openBills.reduce((s, b) => s + Number(b.amount), 0);
+  const filtered = d.bills.filter((b) => statusFilter === "all" || b.status === statusFilter);
+
+  const suggestFromPlan = () => {
+    if (!memberPlan) {
+      toast.error("No active plan on this member to copy from.");
+      return;
+    }
+    setTitle(memberPlan.name);
+    setAmount(String(memberPlan.price));
+  };
+
+  const createBill = async (
+    form: HTMLFormElement,
+    intent: "draft" | "site" | "whatsapp",
+  ) => {
+    const f = new FormData(form);
+    const isMember = recipient === "member";
+    const userId = isMember ? String(f.get("user_id") || "") : null;
+    const guestName = isMember ? null : String(f.get("guest_name") || "").trim() || null;
+    const guestPhoneRaw = String(f.get("guest_phone") || "").trim() || null;
+    const guestPhone = isMember
+      ? guestPhoneRaw || selectedMember?.phone || null
+      : guestPhoneRaw;
+
+    if (isMember && !userId) throw new Error("Select a member.");
+    if (!isMember && !guestName) throw new Error("Enter the person's name.");
+    if (intent === "site" && !userId) throw new Error("Send on site needs a member account.");
+    if (intent === "whatsapp" && !guestPhone) {
+      throw new Error("Add a WhatsApp number to send the bill.");
+    }
+
+    const billTitle = String(f.get("title") || title).trim();
+    const billAmount = Number(f.get("amount") || amount);
+    if (!billTitle) throw new Error("Enter a bill title.");
+    if (!(billAmount >= 0)) throw new Error("Enter a valid amount.");
+
+    const row = {
+      bill_number: nextBillNumber(),
+      user_id: userId,
+      guest_name: isMember ? null : guestName,
+      guest_phone: guestPhone,
+      category: String(f.get("category")),
+      title: billTitle,
+      description: String(f.get("description") || "").trim() || null,
+      amount: billAmount,
+      status: intent === "draft" ? "draft" : "sent",
+      billed_on: String(f.get("billed_on") || today()),
+      due_on: String(f.get("due_on") || "") || null,
+      created_by: user?.id ?? null,
+      note: String(f.get("note") || "").trim() || null,
+      whatsapp_sent_at: null as string | null,
+    };
+
+    const { data: created, error } = await db.from("bills").insert(row).select("*").single();
+    if (error) throw error;
+    const bill = created as Bill;
+
+    if (intent === "whatsapp") {
+      const digits = toWhatsAppDigits(guestPhone!);
+      if (digits.length < 10) throw new Error("Phone number looks incomplete.");
+      window.open(
+        `https://wa.me/${digits}?text=${encodeURIComponent(buildBillWhatsAppMessage(d, bill))}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
+      await db
+        .from("bills")
+        .update({ whatsapp_sent_at: new Date().toISOString(), status: "sent" })
+        .eq("id", bill.id);
+    }
+
+    form.reset();
+    setTitle("");
+    setAmount("");
+    return intent;
+  };
+
+  const onCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const intent = createIntent.current;
+    setBusy(true);
+    try {
+      const result = await createBill(form, intent);
+      toast.success(
+        result === "whatsapp"
+          ? "Bill recorded — WhatsApp opened."
+          : result === "site"
+            ? "Bill recorded and sent on site."
+            : "Bill recorded as draft.",
+      );
+      createIntent.current = "draft";
+      reload();
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitWith = (intent: "draft" | "site" | "whatsapp") => {
+    createIntent.current = intent;
+    formRef.current?.requestSubmit();
+  };
+
+  const setStatus = async (bill: Bill, status: string, extra: Record<string, unknown> = {}) => {
+    const { error } = await db.from("bills").update({ status, ...extra }).eq("id", bill.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success(status === "paid" ? "Marked paid." : status === "sent" ? "Sent on site." : "Updated.");
+      reload();
+    }
+  };
+
+  const sendOnSite = async (bill: Bill) => {
+    if (!bill.user_id) {
+      toast.error("This bill has no member account. Use WhatsApp instead.");
+      return;
+    }
+    await setStatus(bill, "sent");
+  };
+
+  const sendWhatsApp = async (bill: Bill) => {
+    let phone = billPhone(d, bill);
+    if (!phone) {
+      setPhoneEditId(bill.id);
+      setPhoneDraft("");
+      toast.error("Add a phone number, then tap WhatsApp again.");
+      return;
+    }
+    const digits = toWhatsAppDigits(phone);
+    if (digits.length < 10) {
+      toast.error("Phone number looks incomplete.");
+      return;
+    }
+    const url = `https://wa.me/${digits}?text=${encodeURIComponent(buildBillWhatsAppMessage(d, bill))}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+    const patch: Record<string, unknown> = { whatsapp_sent_at: new Date().toISOString() };
+    if (bill.status === "draft") patch["status"] = "sent";
+    const { error } = await db.from("bills").update(patch).eq("id", bill.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("WhatsApp opened — bill marked sent.");
+      reload();
+    }
+  };
+
+  const savePhone = async (bill: Bill) => {
+    const phone = phoneDraft.trim();
+    if (!phone) {
+      toast.error("Enter a phone number.");
+      return;
+    }
+    const { error } = await db.from("bills").update({ guest_phone: phone }).eq("id", bill.id);
+    if (error) toast.error(error.message);
+    else {
+      setPhoneEditId(null);
+      toast.success("Phone saved.");
+      reload();
+    }
+  };
+
+  const markPaid = async (bill: Bill) => {
+    try {
+      setBusy(true);
+      let paymentId: string | null = bill.payment_id;
+      if (bill.user_id && !paymentId) {
+        const membership = activeMembershipFor(d, bill.user_id);
+        const { data: payment, error: payErr } = await db
+          .from("payments")
+          .insert({
+            user_id: bill.user_id,
+            membership_id: membership?.id ?? null,
+            amount: bill.amount,
+            paid_on: today(),
+            method: payMethod,
+            note: `Bill ${bill.bill_number}: ${bill.title}`,
+          })
+          .select("id")
+          .single();
+        if (payErr) throw payErr;
+        paymentId = payment.id;
+      }
+      await setStatus(bill, "paid", { paid_on: today(), payment_id: paymentId });
+      setPayBillId(null);
+      setPayMethod("cash");
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat label="Open bills" value={String(openBills.length)} hint={`${inr(openTotal)} outstanding`} />
+        <Stat
+          label="Paid"
+          value={String(d.bills.filter((b) => b.status === "paid").length)}
+          hint="Recorded as paid"
+        />
+        <Stat label="All bills" value={String(d.bills.length)} hint="Members + walk-ins" />
+      </div>
+
+      <Panel title="Generate a bill">
+        <form ref={formRef} onSubmit={(e) => void onCreate(e)} className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={recipient === "member" ? "copper" : "ghost"}
+              size="sm"
+              onClick={() => setRecipient("member")}
+            >
+              Gym member
+            </Button>
+            <Button
+              type="button"
+              variant={recipient === "guest" ? "copper" : "ghost"}
+              size="sm"
+              onClick={() => setRecipient("guest")}
+            >
+              New / walk-in person
+            </Button>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {recipient === "member" ? (
+              <>
+                <Field label="Member">
+                  <select
+                    name="user_id"
+                    required
+                    className={inputClass}
+                    value={selectedMemberId}
+                    onChange={(e) => {
+                      setSelectedMemberId(e.target.value);
+                      setTitle("");
+                      setAmount("");
+                    }}
+                  >
+                    {d.profiles.length === 0 ? (
+                      <option value="">No members yet</option>
+                    ) : (
+                      d.profiles.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.full_name || p.phone || p.id.slice(0, 8)}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </Field>
+                <Field label="WhatsApp number">
+                  <input
+                    name="guest_phone"
+                    className={inputClass}
+                    placeholder={selectedMember?.phone || "Uses profile phone if blank"}
+                  />
+                </Field>
+                {memberPlan && (
+                  <div className="flex items-end">
+                    <Button type="button" variant="copperOutline" size="sm" className="w-full" onClick={suggestFromPlan}>
+                      Use plan: {memberPlan.name} · {inr(memberPlan.price)}
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <Field label="Person name">
+                  <input name="guest_name" required className={inputClass} placeholder="Full name" />
+                </Field>
+                <Field label="WhatsApp number">
+                  <input name="guest_phone" className={inputClass} placeholder="10-digit mobile" />
+                </Field>
+              </>
+            )}
+            <Field label="Category">
+              <select name="category" className={inputClass} defaultValue="membership">
+                {BILL_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Title">
+              <input
+                name="title"
+                required
+                className={inputClass}
+                placeholder="e.g. 3-month membership"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </Field>
+            <Field label="Amount (₹)">
+              <input
+                name="amount"
+                type="number"
+                min={0}
+                required
+                className={inputClass}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </Field>
+            <Field label="Billed on">
+              <input name="billed_on" type="date" defaultValue={today()} className={inputClass} />
+            </Field>
+            <Field label="Due on">
+              <input name="due_on" type="date" className={inputClass} />
+            </Field>
+            <Field label="Details">
+              <input name="description" className={inputClass} placeholder="Optional line item detail" />
+            </Field>
+            <Field label="Internal note">
+              <input name="note" className={inputClass} placeholder="Optional" />
+            </Field>
+          </div>
+
+          <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+            <Button
+              type="submit"
+              variant="copperOutline"
+              size="editorial"
+              disabled={busy}
+              onClick={() => {
+                createIntent.current = "draft";
+              }}
+            >
+              Save draft
+            </Button>
+            {recipient === "member" && (
+              <Button
+                type="button"
+                variant="copper"
+                size="editorial"
+                disabled={busy || !selectedMemberId}
+                onClick={() => submitWith("site")}
+              >
+                Save & send on site
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="copper"
+              size="editorial"
+              disabled={busy}
+              onClick={() => submitWith("whatsapp")}
+            >
+              Save & WhatsApp
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Members with accounts see sent bills in their app. Walk-ins get the WhatsApp message. Run{" "}
+            <code className="text-foreground">supabase/bills.sql</code> once if save fails.
+          </p>
+        </form>
+      </Panel>
+
+      <Panel
+        title="Bill ledger"
+        action={
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className={inputClass + " max-w-40"}
+          >
+            <option value="all">All statuses</option>
+            {BILL_STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        }
+      >
+        {filtered.length === 0 ? (
+          <Empty text="No bills yet. Generate one above for a member or walk-in." />
+        ) : (
+          <Table head={["Bill", "Person", "Amount", "Status", "Send", ""]}>
+            {filtered.map((bill) => {
+              const phone = billPhone(d, bill);
+              const hasAccount = Boolean(bill.user_id);
+              const editingPhone = phoneEditId === bill.id;
+              const confirmingPay = payBillId === bill.id;
+              return (
+                <tr key={bill.id} className="border-b border-border/60 align-top">
+                  <td className="py-3 pr-4">
+                    <p className="font-semibold">{bill.bill_number}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {bill.title} · {labelOf(BILL_CATEGORIES, bill.category)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{fmtDate(bill.billed_on)}</p>
+                  </td>
+                  <td className="py-3 pr-4">
+                    <p className="font-semibold">{billRecipientName(d, bill)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {hasAccount ? "Member account" : "Walk-in"}
+                      {phone ? ` · ${phone}` : " · no phone"}
+                    </p>
+                    {editingPhone && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <input
+                          className={inputClass + " max-w-40"}
+                          placeholder="Mobile number"
+                          value={phoneDraft}
+                          onChange={(e) => setPhoneDraft(e.target.value)}
+                        />
+                        <Button size="sm" variant="copper" onClick={() => void savePhone(bill)}>
+                          Save
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setPhoneEditId(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-3 pr-4 font-semibold">{inr(bill.amount)}</td>
+                  <td className="py-3 pr-4">
+                    <span
+                      className={
+                        bill.status === "paid"
+                          ? "text-primary"
+                          : bill.status === "cancelled"
+                            ? "text-muted-foreground"
+                            : ""
+                      }
+                    >
+                      {labelOf(BILL_STATUSES, bill.status)}
+                    </span>
+                    {bill.whatsapp_sent_at && (
+                      <p className="text-[10px] text-muted-foreground">WA {fmtDate(bill.whatsapp_sent_at)}</p>
+                    )}
+                  </td>
+                  <td className="py-3 pr-4">
+                    <div className="flex flex-col gap-1">
+                      {hasAccount && bill.status !== "paid" && bill.status !== "cancelled" && (
+                        <Button variant="copperOutline" size="sm" onClick={() => void sendOnSite(bill)}>
+                          {bill.status === "sent" ? "Resend on site" : "Send on site"}
+                        </Button>
+                      )}
+                      {bill.status !== "cancelled" && (
+                        <Button variant="ghost" size="sm" onClick={() => void sendWhatsApp(bill)}>
+                          WhatsApp
+                        </Button>
+                      )}
+                      {!phone && bill.status !== "cancelled" && !editingPhone && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setPhoneEditId(bill.id);
+                            setPhoneDraft("");
+                          }}
+                        >
+                          Add phone
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-3 pr-4">
+                    <div className="flex flex-col gap-1">
+                      {bill.status !== "paid" && bill.status !== "cancelled" && !confirmingPay && (
+                        <Button
+                          variant="copper"
+                          size="sm"
+                          onClick={() => {
+                            setPayBillId(bill.id);
+                            setPayMethod("cash");
+                          }}
+                        >
+                          Mark paid
+                        </Button>
+                      )}
+                      {confirmingPay && (
+                        <div className="space-y-2">
+                          {bill.user_id ? (
+                            <select
+                              className={inputClass}
+                              value={payMethod}
+                              onChange={(e) => setPayMethod(e.target.value)}
+                            >
+                              {["cash", "upi", "card", "bank"].map((m) => (
+                                <option key={m} value={m}>
+                                  {m.toUpperCase()}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground">Walk-in — no fee row</p>
+                          )}
+                          <Button size="sm" variant="copper" disabled={busy} onClick={() => void markPaid(bill)}>
+                            Confirm paid
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setPayBillId(null)}>
+                            Back
+                          </Button>
+                        </div>
+                      )}
+                      {bill.status !== "cancelled" && bill.status !== "paid" && !confirmingPay && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void setStatus(bill, "cancelled")}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </Table>
         )}
       </Panel>

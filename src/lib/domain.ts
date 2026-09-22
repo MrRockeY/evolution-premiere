@@ -117,6 +117,42 @@ export type AdviceReply = {
   created_at: string;
 };
 
+export type Bill = {
+  id: string;
+  bill_number: string;
+  user_id: string | null;
+  guest_name: string | null;
+  guest_phone: string | null;
+  category: string;
+  title: string;
+  description: string | null;
+  amount: number;
+  status: string;
+  billed_on: string;
+  due_on: string | null;
+  paid_on: string | null;
+  payment_id: string | null;
+  created_by: string | null;
+  note: string | null;
+  whatsapp_sent_at: string | null;
+  created_at?: string;
+};
+
+export const BILL_CATEGORIES = [
+  { value: "membership", label: "Membership" },
+  { value: "personal_training", label: "Personal training" },
+  { value: "day_pass", label: "Day pass" },
+  { value: "merchandise", label: "Merchandise" },
+  { value: "other", label: "Other" },
+];
+
+export const BILL_STATUSES = [
+  { value: "draft", label: "Draft" },
+  { value: "sent", label: "Sent" },
+  { value: "paid", label: "Paid" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
 export type MemberPlan = {
   id: string;
   user_id: string;
