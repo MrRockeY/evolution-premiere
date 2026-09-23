@@ -23,8 +23,12 @@ create table if not exists public.bills (
   created_by uuid references auth.users(id) on delete set null,
   note text,
   whatsapp_sent_at timestamptz,
+  sms_sent_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+-- Safe if bills table already exists from an earlier run
+alter table public.bills add column if not exists sms_sent_at timestamptz;
 
 grant select, insert, update, delete on public.bills to authenticated;
 grant all on public.bills to service_role;

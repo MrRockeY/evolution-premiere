@@ -135,6 +135,7 @@ export type Bill = {
   created_by: string | null;
   note: string | null;
   whatsapp_sent_at: string | null;
+  sms_sent_at?: string | null;
   created_at?: string;
 };
 

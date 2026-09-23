@@ -503,8 +503,10 @@ create table if not exists public.bills (
   created_by uuid references auth.users(id) on delete set null,
   note text,
   whatsapp_sent_at timestamptz,
+  sms_sent_at timestamptz,
   created_at timestamptz not null default now()
 );
+alter table public.bills add column if not exists sms_sent_at timestamptz;
 grant select, insert, update, delete on public.bills to authenticated;
 grant all on public.bills to service_role;
 alter table public.bills enable row level security;

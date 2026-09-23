@@ -828,7 +828,9 @@ function nextBillNumber() {
   return `EF-${stamp}-${rand}`;
 }
 
-function toWhatsAppDigits(phone: string) {
+type PhoneChannel = "whatsapp" | "sms";
+
+function toPhoneDigits(phone: string) {
   const digits = phone.replace(/\D/g, "");
   if (digits.length === 10) return `91${digits}`;
   if (digits.length === 11 && digits.startsWith("0")) return `91${digits.slice(1)}`;
@@ -846,10 +848,11 @@ function billPhone(d: OwnerData, bill: Bill) {
   return null;
 }
 
-function buildBillWhatsAppMessage(d: OwnerData, bill: Bill) {
+function buildBillMessage(d: OwnerData, bill: Bill, channel: PhoneChannel) {
   const who = billRecipientName(d, bill);
+  const heading = channel === "whatsapp" ? "*Evolution Fitness — Bill*" : "Evolution Fitness — Bill";
   const lines = [
-    `*Evolution Fitness — Bill*`,
+    heading,
     `Bill No: ${bill.bill_number}`,
     `Name: ${who}`,
     `For: ${bill.title}`,
@@ -861,6 +864,22 @@ function buildBillWhatsAppMessage(d: OwnerData, bill: Bill) {
   if (bill.description) lines.push(`Details: ${bill.description}`);
   lines.push("", "Please pay at the Evolution Fitness desk or via UPI. Thank you!");
   return lines.join("\n");
+}
+
+function openBillOnPhone(phone: string, message: string, channel: PhoneChannel) {
+  const digits = toPhoneDigits(phone);
+  if (digits.length < 10) throw new Error("Phone number looks incomplete.");
+  if (channel === "whatsapp") {
+    window.open(
+      `https://wa.me/${digits}?text=${encodeURIComponent(message)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  } else {
+    // Opens the device SMS app with the bill text pre-filled (for non-WhatsApp users).
+    window.location.href = `sms:+${digits}?body=${encodeURIComponent(message)}`;
+  }
+  return digits;
 }
 
 function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
@@ -875,7 +894,7 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
   const [phoneDraft, setPhoneDraft] = useState("");
   const [payBillId, setPayBillId] = useState<string | null>(null);
   const [payMethod, setPayMethod] = useState("cash");
-  const createIntent = useRef<"draft" | "site" | "whatsapp">("draft");
+  const createIntent = useRef<"draft" | "site" | PhoneChannel>("draft");
   const formRef = useRef<HTMLFormElement>(null);
 
   const selectedMember = d.profiles.find((p) => p.id === selectedMemberId);
@@ -899,7 +918,7 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
 
   const createBill = async (
     form: HTMLFormElement,
-    intent: "draft" | "site" | "whatsapp",
+    intent: "draft" | "site" | PhoneChannel,
   ) => {
     const f = new FormData(form);
     const isMember = recipient === "member";
@@ -913,8 +932,8 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
     if (isMember && !userId) throw new Error("Select a member.");
     if (!isMember && !guestName) throw new Error("Enter the person's name.");
     if (intent === "site" && !userId) throw new Error("Send on site needs a member account.");
-    if (intent === "whatsapp" && !guestPhone) {
-      throw new Error("Add a WhatsApp number to send the bill.");
+    if ((intent === "whatsapp" || intent === "sms") && !guestPhone) {
+      throw new Error("Add a phone number to send the bill.");
     }
 
     const billTitle = String(f.get("title") || title).trim();
@@ -943,18 +962,14 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
     if (error) throw error;
     const bill = created as Bill;
 
-    if (intent === "whatsapp") {
-      const digits = toWhatsAppDigits(guestPhone!);
-      if (digits.length < 10) throw new Error("Phone number looks incomplete.");
-      window.open(
-        `https://wa.me/${digits}?text=${encodeURIComponent(buildBillWhatsAppMessage(d, bill))}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
-      await db
-        .from("bills")
-        .update({ whatsapp_sent_at: new Date().toISOString(), status: "sent" })
-        .eq("id", bill.id);
+    if (intent === "whatsapp" || intent === "sms") {
+      openBillOnPhone(guestPhone!, buildBillMessage(d, bill, intent), intent);
+      const stamp = new Date().toISOString();
+      const patch =
+        intent === "whatsapp"
+          ? { whatsapp_sent_at: stamp, status: "sent" }
+          : { sms_sent_at: stamp, status: "sent" };
+      await db.from("bills").update(patch).eq("id", bill.id);
     }
 
     form.reset();
@@ -973,9 +988,11 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
       toast.success(
         result === "whatsapp"
           ? "Bill recorded — WhatsApp opened."
-          : result === "site"
-            ? "Bill recorded and sent on site."
-            : "Bill recorded as draft.",
+          : result === "sms"
+            ? "Bill recorded — SMS app opened."
+            : result === "site"
+              ? "Bill recorded and sent on site."
+              : "Bill recorded as draft.",
       );
       createIntent.current = "draft";
       reload();
@@ -986,7 +1003,7 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
     }
   };
 
-  const submitWith = (intent: "draft" | "site" | "whatsapp") => {
+  const submitWith = (intent: "draft" | "site" | PhoneChannel) => {
     createIntent.current = intent;
     formRef.current?.requestSubmit();
   };
@@ -1002,34 +1019,38 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
 
   const sendOnSite = async (bill: Bill) => {
     if (!bill.user_id) {
-      toast.error("This bill has no member account. Use WhatsApp instead.");
+      toast.error("This bill has no member account. Use WhatsApp or SMS instead.");
       return;
     }
     await setStatus(bill, "sent");
   };
 
-  const sendWhatsApp = async (bill: Bill) => {
-    let phone = billPhone(d, bill);
+  const sendOnPhone = async (bill: Bill, channel: PhoneChannel) => {
+    const phone = billPhone(d, bill);
     if (!phone) {
       setPhoneEditId(bill.id);
       setPhoneDraft("");
-      toast.error("Add a phone number, then tap WhatsApp again.");
+      toast.error(`Add a phone number, then tap ${channel === "whatsapp" ? "WhatsApp" : "SMS"} again.`);
       return;
     }
-    const digits = toWhatsAppDigits(phone);
-    if (digits.length < 10) {
-      toast.error("Phone number looks incomplete.");
-      return;
-    }
-    const url = `https://wa.me/${digits}?text=${encodeURIComponent(buildBillWhatsAppMessage(d, bill))}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-    const patch: Record<string, unknown> = { whatsapp_sent_at: new Date().toISOString() };
-    if (bill.status === "draft") patch["status"] = "sent";
-    const { error } = await db.from("bills").update(patch).eq("id", bill.id);
-    if (error) toast.error(error.message);
-    else {
-      toast.success("WhatsApp opened — bill marked sent.");
-      reload();
+    try {
+      openBillOnPhone(phone, buildBillMessage(d, bill, channel), channel);
+      const stamp = new Date().toISOString();
+      const patch: Record<string, unknown> =
+        channel === "whatsapp" ? { whatsapp_sent_at: stamp } : { sms_sent_at: stamp };
+      if (bill.status === "draft") patch["status"] = "sent";
+      const { error } = await db.from("bills").update(patch).eq("id", bill.id);
+      if (error) toast.error(error.message);
+      else {
+        toast.success(
+          channel === "whatsapp"
+            ? "WhatsApp opened — bill marked sent."
+            : "SMS app opened — bill marked sent.",
+        );
+        reload();
+      }
+    } catch (e) {
+      toast.error(errMsg(e));
     }
   };
 
@@ -1138,7 +1159,7 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
                     )}
                   </select>
                 </Field>
-                <Field label="WhatsApp number">
+                <Field label="Phone number">
                   <input
                     name="guest_phone"
                     className={inputClass}
@@ -1158,7 +1179,7 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
                 <Field label="Person name">
                   <input name="guest_name" required className={inputClass} placeholder="Full name" />
                 </Field>
-                <Field label="WhatsApp number">
+                <Field label="Phone number">
                   <input name="guest_phone" className={inputClass} placeholder="10-digit mobile" />
                 </Field>
               </>
@@ -1239,10 +1260,20 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
             >
               Save & WhatsApp
             </Button>
+            <Button
+              type="button"
+              variant="copperOutline"
+              size="editorial"
+              disabled={busy}
+              onClick={() => submitWith("sms")}
+            >
+              Save & SMS
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Members with accounts see sent bills in their app. Walk-ins get the WhatsApp message. Run{" "}
-            <code className="text-foreground">supabase/bills.sql</code> once if save fails.
+            Members with accounts see sent bills in their app. For others, choose WhatsApp or SMS
+            (text message). Run <code className="text-foreground">supabase/bills.sql</code> once if
+            save fails.
           </p>
         </form>
       </Panel>
@@ -1321,6 +1352,9 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
                     {bill.whatsapp_sent_at && (
                       <p className="text-[10px] text-muted-foreground">WA {fmtDate(bill.whatsapp_sent_at)}</p>
                     )}
+                    {bill.sms_sent_at && (
+                      <p className="text-[10px] text-muted-foreground">SMS {fmtDate(bill.sms_sent_at)}</p>
+                    )}
                   </td>
                   <td className="py-3 pr-4">
                     <div className="flex flex-col gap-1">
@@ -1330,9 +1364,14 @@ function Billing({ d, reload }: { d: OwnerData; reload: () => void }) {
                         </Button>
                       )}
                       {bill.status !== "cancelled" && (
-                        <Button variant="ghost" size="sm" onClick={() => void sendWhatsApp(bill)}>
-                          WhatsApp
-                        </Button>
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => void sendOnPhone(bill, "whatsapp")}>
+                            WhatsApp
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => void sendOnPhone(bill, "sms")}>
+                            SMS
+                          </Button>
+                        </>
                       )}
                       {!phone && bill.status !== "cancelled" && !editingPhone && (
                         <Button
